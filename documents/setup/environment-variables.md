@@ -279,7 +279,7 @@ Chuỗi kết nối Redis dùng cho BullMQ.
 REDIS_URL="redis://localhost:6379"
 ```
 
-## 5. CORS (Cross-Origin Resource Sharing)
+## 6. CORS (Cross-Origin Resource Sharing)
 
 ### CORS_ORIGIN
 
@@ -312,7 +312,7 @@ CORS_ORIGIN="*"
 
 ---
 
-## 6. Server Configuration
+## 7. Server Configuration
 
 ### PORT
 
@@ -353,7 +353,7 @@ NODE_ENV="development"
 
 ---
 
-## 7. AWS S3 Configuration
+## 8. AWS S3 Configuration
 
 ### AWS_REGION
 
