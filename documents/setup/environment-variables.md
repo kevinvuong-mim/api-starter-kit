@@ -265,6 +265,20 @@ MAIL_FROM="noreply@mimkat.com"
 - Thường sử dụng địa chỉ dạng `noreply@` hoặc `support@`
 - Email này sẽ hiển thị cho người nhận
 
+---
+
+## 5. Redis
+
+### REDIS_URL
+
+Chuỗi kết nối Redis dùng cho BullMQ.
+
+**Format:**
+
+```env
+REDIS_URL="redis://localhost:6379"
+```
+
 ## 5. CORS (Cross-Origin Resource Sharing)
 
 ### CORS_ORIGIN

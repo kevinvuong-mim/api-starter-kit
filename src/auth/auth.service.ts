@@ -11,11 +11,11 @@ import { JwtService } from '@nestjs/jwt';
 
 import { DeviceInfo } from '@/common/utils';
 import { LoginDto } from '@/auth/dto/login.dto';
-import { MailService } from '@/mail/mail.service';
 import { RegisterDto } from '@/auth/dto/register.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { GoogleAuthDto } from '@/auth/dto/google-auth.dto';
 import { AUTH_CONSTANTS } from '@/auth/constants/auth.constants';
+import { MailQueueService } from '@/mail/queue/mail-queue.service';
 
 @Injectable()
 export class AuthService {
@@ -24,7 +24,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private mailService: MailService,
+    private mailQueueService: MailQueueService,
   ) {}
 
   private async generateTokens(userId: string, sessionId: string) {
@@ -144,13 +144,17 @@ export class AuthService {
       },
     });
 
-    // Send verification email
+    // Enqueue verification email for background processing
     try {
-      await this.mailService.sendVerificationEmail(email, verificationToken, frontendUrl);
+      await this.mailQueueService.enqueueVerificationEmail({
+        email,
+        token: verificationToken,
+        frontendUrl,
+      });
     } catch (error) {
-      // Log error but don't fail registration
+      // Keep registration successful even if queue enqueue fails
       this.logger.error(
-        'Failed to send verification email',
+        'Failed to enqueue verification email job',
         error instanceof Error ? error.stack : String(error),
       );
     }

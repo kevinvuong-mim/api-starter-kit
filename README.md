@@ -41,6 +41,8 @@ Backend API for Mimkat application built with NestJS, PostgreSQL, and Prisma ORM
 ### Email
 
 - **[Nodemailer](https://nodemailer.com/)** - Email sending library
+- **[BullMQ](https://docs.bullmq.io/)** - Background job queue
+- **[Redis](https://redis.io/)** - Queue broker and job state storage
 
 ### Security & Utilities
 
