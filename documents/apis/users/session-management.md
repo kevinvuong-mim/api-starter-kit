@@ -68,7 +68,7 @@ Cookie: accessToken=<token>
     }
   ],
   "meta": {
-    "total": 5,
+    "total": 2,
     "page": 1,
     "perPage": 10,
     "totalPages": 1,

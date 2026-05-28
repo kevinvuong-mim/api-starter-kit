@@ -1,14 +1,14 @@
-# Hướng dẫn sử dụng Docker cho Database
+# Hướng dẫn sử dụng Docker cho Database và Redis
 
-Tài liệu này hướng dẫn cách sử dụng Docker để chạy PostgreSQL database cho dự án mimkat-api.
+Tài liệu này hướng dẫn cách sử dụng Docker để chạy PostgreSQL và Redis cho dự án mimkat-api.
 
 ## Tại sao nên dùng Docker?
 
-- ✅ Không cần cài đặt PostgreSQL trực tiếp trên máy
-- ✅ Dễ dàng khởi động và dừng database
+- ✅ Không cần cài đặt PostgreSQL/Redis trực tiếp trên máy
+- ✅ Dễ dàng khởi động và dừng các service
 - ✅ Cấu hình nhất quán giữa các môi trường
 - ✅ Dễ dàng xóa và tạo lại database
-- ✅ Không ảnh hưởng đến các PostgreSQL instance khác trên máy
+- ✅ Không ảnh hưởng đến các PostgreSQL/Redis instance khác trên máy
 
 ## Yêu cầu
 
@@ -72,14 +72,32 @@ services:
       interval: 10s
       test: ['CMD-SHELL', 'pg_isready -U postgres']
 
+  redis:
+    ports:
+      - '6379:6379'
+    restart: unless-stopped
+    image: redis:8.6-alpine
+    container_name: mimkat-redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      retries: 5
+      timeout: 5s
+      interval: 10s
+      test: ['CMD', 'redis-cli', 'ping']
+
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local
 ```
 
 ### Thông tin kết nối
 
-Khi sử dụng Docker, database sẽ có thông tin kết nối:
+Khi sử dụng Docker, các service sẽ có thông tin kết nối:
+
+**PostgreSQL:**
 
 - **Port**: `5432`
 - **Host**: `localhost`
@@ -87,22 +105,29 @@ Khi sử dụng Docker, database sẽ có thông tin kết nối:
 - **Password**: `1234abcd`
 - **Username**: `kwong2000`
 
+**Redis:**
+
+- **Port**: `6379`
+- **Host**: `localhost`
+- **URL**: `redis://localhost:6379`
+
 **Connection String cho .env:**
 
 ```env
 DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/mimkat"
+REDIS_URL="redis://localhost:6379"
 ```
 
 ## Sử dụng
 
-### 1. Khởi động database
+### 1. Khởi động services
 
 ```bash
 docker-compose up -d
 ```
 
 - Flag `-d` để chạy ở chế độ background (detached)
-- Lần đầu tiên sẽ mất vài giây để tải PostgreSQL image
+- Lần đầu tiên sẽ mất vài giây để tải PostgreSQL và Redis images
 
 ### 2. Kiểm tra trạng thái
 
@@ -114,19 +139,25 @@ docker-compose ps
 docker ps
 ```
 
-Bạn sẽ thấy container `mimkat-postgres` đang chạy.
+Bạn sẽ thấy 2 container `mimkat-postgres` và `mimkat-redis` đang chạy.
 
 ### 3. Xem logs
 
 ```bash
-# Xem logs realtime
+# Xem logs realtime cho tất cả service
+docker-compose logs -f
+
+# Xem logs realtime cho PostgreSQL
 docker-compose logs -f postgres
 
-# Chỉ xem logs (không follow)
+# Xem logs realtime cho Redis
+docker-compose logs -f redis
+
+# Chỉ xem logs PostgreSQL (không follow)
 docker-compose logs postgres
 ```
 
-### 4. Dừng database
+### 4. Dừng services
 
 ```bash
 # Dừng nhưng giữ lại data
@@ -144,6 +175,16 @@ docker-compose start
 
 # Hoặc dùng up lại
 docker-compose up -d
+```
+
+### 6. Kiểm tra Redis
+
+```bash
+# Test Redis từ trong container
+docker-compose exec redis redis-cli ping
+
+# Kết quả mong đợi
+PONG
 ```
 
 ## Các lệnh hữu ích
@@ -204,6 +245,22 @@ docker-compose exec postgres pg_dump -U kwong2000 mimkat > backup-$(date +%Y%m%d
 docker-compose exec -T postgres psql -U kwong2000 mimkat < backup.sql
 ```
 
+### Kết nối vào Redis CLI
+
+```bash
+docker-compose exec redis redis-cli
+```
+
+Một số lệnh Redis cơ bản:
+
+```txt
+PING
+SET health ok
+GET health
+KEYS *
+EXIT
+```
+
 ### Thay đổi mật khẩu
 
 Nếu muốn thay đổi mật khẩu, sửa trong `docker-compose.yml`:
@@ -257,6 +314,35 @@ Và cập nhật `DATABASE_URL`:
 DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5433/mimkat"
 ```
 
+### Port 6379 đã được sử dụng
+
+**Lỗi:** `Error starting userland proxy: listen tcp4 0.0.0.0:6379: bind: address already in use`
+
+**Nguyên nhân:** Đã có Redis local đang chạy trên port 6379
+
+**Giải pháp 1:** Dừng Redis local
+
+```bash
+# macOS (Homebrew)
+brew services stop redis
+
+# Linux
+sudo systemctl stop redis
+```
+
+**Giải pháp 2:** Đổi port trong docker-compose.yml
+
+```yaml
+ports:
+  - '6380:6379'
+```
+
+Và cập nhật `REDIS_URL`:
+
+```env
+REDIS_URL="redis://localhost:6380"
+```
+
 ### Container không start
 
 ```bash
@@ -292,6 +378,9 @@ docker-compose logs postgres
 
 # Test connection
 docker-compose exec postgres pg_isready -U kwong2000
+
+# Test Redis
+docker-compose exec redis redis-cli ping
 ```
 
 ### Data bị mất sau khi restart
@@ -315,6 +404,7 @@ docker-compose exec postgres pg_isready -U kwong2000
 
 - Mật khẩu mặc định `1234abcd` chỉ dùng cho local development
 - Không expose port 5432 ra internet
+- Không expose port 6379 ra internet
 - Không commit `.env` với credentials vào Git
 
 ### Performance
@@ -326,6 +416,7 @@ docker-compose exec postgres pg_isready -U kwong2000
 ### Data Persistence
 
 - Data được lưu trong Docker volume `postgres_data`
+- Data Redis được lưu trong Docker volume `redis_data`
 - Volume tồn tại ngay cả khi container bị xóa
 - Chỉ mất data khi chạy `docker-compose down -v` hoặc xóa volume thủ công
 
@@ -347,11 +438,20 @@ docker-compose down -v
 # Xem logs
 docker-compose logs -f postgres
 
+# Xem logs Redis
+docker-compose logs -f redis
+
 # Kiểm tra status
 docker-compose ps
 
 # Kết nối PostgreSQL CLI
 docker-compose exec postgres psql -U kwong2000 -d mimkat
+
+# Kết nối Redis CLI
+docker-compose exec redis redis-cli
+
+# Test Redis
+docker-compose exec redis redis-cli ping
 
 # Backup
 docker-compose exec postgres pg_dump -U kwong2000 mimkat > backup.sql
