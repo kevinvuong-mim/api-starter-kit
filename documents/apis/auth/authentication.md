@@ -20,6 +20,7 @@ API xác thực người dùng, hỗ trợ cả Bearer tokens và HttpOnly cooki
 - Rate limiting
 - HttpOnly cookies với SameSite=Lax
 - Maximum 10 concurrent sessions per user
+- Session bị giới hạn tuyệt đối trong 30 ngày kể từ lúc tạo
 
 ---
 
@@ -196,10 +197,10 @@ Set-Cookie: accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secur
 Set-Cookie: refreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secure; SameSite=Lax; Max-Age=604800; Path=/
 ```
 
-| Field        | Type   | Description                                       |
-| ------------ | ------ | ------------------------------------------------- |
-| accessToken  | string | JWT token để xác thực các API requests (1 giờ)    |
-| refreshToken | string | Token để làm mới accessToken khi hết hạn (7 ngày) |
+| Field        | Type   | Description                                                           |
+| ------------ | ------ | --------------------------------------------------------------------- |
+| accessToken  | string | JWT token để xác thực các API requests (1 giờ)                        |
+| refreshToken | string | Token để làm mới accessToken trong 7 ngày, với session tối đa 30 ngày |
 
 **Error Responses**
 
@@ -328,7 +329,7 @@ curl -X POST http://localhost:3000/auth/login \
 - Hệ thống tự động thu thập thông tin thiết bị từ request headers
 - Mỗi người dùng có giới hạn **10 phiên đăng nhập đồng thời** (MAX_CONCURRENT_SESSIONS)
 - Khi vượt quá giới hạn, phiên cũ nhất (theo lastUsedAt) sẽ tự động bị đăng xuất
-- AccessToken: 1 giờ, RefreshToken: 7 ngày
+- AccessToken: 1 giờ, RefreshToken: 7 ngày (sliding window), Session tối đa: 30 ngày
 - Password được verify bằng bcrypt.compare()
 - Refresh token được hash với bcrypt (salt rounds = 10) trước khi lưu vào database
 
@@ -550,6 +551,19 @@ Set-Cookie: refreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secu
 }
 ```
 
+- **401 Unauthorized**: Session đã vượt quá giới hạn 30 ngày
+
+```json
+{
+  "success": false,
+  "statusCode": 401,
+  "message": "Session has expired",
+  "error": "Unauthorized",
+  "timestamp": "2025-11-12T10:00:00.000Z",
+  "path": "/auth/refresh"
+}
+```
+
 **Response Headers (Clear cookies khi có lỗi)**:
 
 ```
@@ -583,7 +597,8 @@ curl -X POST http://localhost:3000/auth/refresh \
 - **Hybrid Support**: Lấy refresh token từ cookie trước, fallback sang body
 - **Token Rotation**: Mỗi lần refresh, token cũ sẽ được update với token mới (session giữ nguyên ID)
 - **Token Hashing**: Refresh token mới được hash bằng bcrypt (salt rounds = 10) trước khi lưu vào database
-- **Session Preservation**: Session ID được giữ nguyên khi refresh, chỉ update `refreshToken` (hash) và `lastUsedAt`
+- **Session Preservation**: Session ID được giữ nguyên khi refresh, chỉ update `refreshToken` (hash), `lastUsedAt`, và `expiresAt` theo sliding 7 ngày
+- **Absolute Session Expiry**: Dù refresh liên tục, session vẫn bị chặn sau 30 ngày kể từ lúc tạo
 - **Cookie Update**: Tự động set cookies mới cho web clients
 - **Response Tokens**: Vẫn trả về tokens trong response body cho mobile/API clients
 - **Device Info Update**: Thông tin thiết bị được cập nhật nếu có deviceInfo mới trong request
@@ -591,7 +606,7 @@ curl -X POST http://localhost:3000/auth/refresh \
 - **Error Handling**: Khi có lỗi (invalid/expired token), cookies sẽ được tự động clear trong try-catch block của controller. Sau đó exception được re-throw để HttpExceptionFilter xử lý response
 - **Expired Session Cleanup**: Session hết hạn được tự động xóa khỏi database
 - **JWT First**: Verify JWT signature trước, sau đó mới compare hash trong database
-- AccessToken mới: 1 giờ, RefreshToken mới: 7 ngày
+- AccessToken mới: 1 giờ, RefreshToken mới: 7 ngày, Session tối đa: 30 ngày
 - Both new tokens contain the same `sessionId` as the old one
 
 ---
@@ -617,7 +632,7 @@ curl -X POST http://localhost:3000/auth/refresh \
 ### Refresh Token
 
 - **Thuật toán**: HS256 (HMAC with SHA-256)
-- **Thời gian sống**: 7 ngày
+- **Thời gian sống**: 7 ngày (sliding window, được cấp lại khi refresh)
 - **Cookie Name**: `refreshToken`
 - **Secret**: `JWT_REFRESH_SECRET` (environment variable)
 - **Lưu trữ**: Database (bảng Session)
@@ -645,7 +660,7 @@ curl -X POST http://localhost:3000/auth/refresh \
 2. **JWT Verification**: Verify JWT signature với `JWT_REFRESH_SECRET` và lấy userId từ payload
 3. **Database Lookup**: Tìm tất cả sessions của user trong database
 4. **Hash Comparison**: Sử dụng bcrypt.compare() để so sánh refresh token với các hash trong database
-5. **Expiration Check**: Kiểm tra `expiresAt` field của session tìm được
+5. **Expiration Check**: Kiểm tra `expiresAt` và `absoluteExpiresAt` của session tìm được
 6. **Token Generation**: Tạo cặp access/refresh token mới với cùng `sessionId`
 7. **Hash New Token**: Hash refresh token mới bằng bcrypt (salt rounds = 10)
 8. **Session Update**: Cập nhật session với refresh token hash mới và thông tin device
@@ -713,6 +728,7 @@ curl -X POST http://localhost:3000/auth/refresh \
   - `createdAt`: Timestamp tạo session
 - **Session Cleanup**: Tự động xóa sessions hết hạn khi refresh token
 - **Refresh Token Security**: Refresh token được hash với bcrypt trước khi lưu vào database để tăng cường bảo mật. Khi verify, sử dụng bcrypt.compare() để so sánh token từ client với hash trong database
+- **Absolute Expiry Field**: Session có thêm `absoluteExpiresAt` để giới hạn đăng nhập tối đa 30 ngày
 
 ### JWT Strategy
 
@@ -772,6 +788,7 @@ curl -X POST http://localhost:3000/auth/refresh \
 
 - User needs to login again
 - Refresh tokens expire after 7 days of inactivity
+- Session vẫn có thể bị buộc đăng xuất sau 30 ngày kể từ lúc login đầu tiên
 - Clear stored tokens and redirect to login
 
 ### "Too many requests"

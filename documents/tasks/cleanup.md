@@ -53,16 +53,18 @@ Tài liệu này mô tả chi tiết các cron job được triển khai trong f
 **Purpose:**
 
 - Xóa các phiên đăng nhập (session) đã hết hạn, giúp giải phóng tài nguyên và đảm bảo tính toàn vẹn của hệ thống đăng nhập.
+- Xóa các phiên đăng nhập (session) đã hết hạn hoặc đã vượt quá giới hạn 30 ngày, giúp giải phóng tài nguyên và đảm bảo tính toàn vẹn của hệ thống đăng nhập.
 
 **Operation Logic:**
 
-- Tìm các session có `expiresAt < thời điểm hiện tại`.
+- Tìm các session có `expiresAt < thời điểm hiện tại` hoặc `absoluteExpiresAt < thời điểm hiện tại`.
 - Xóa các session này khỏi database.
 - Ghi log số lượng session đã xóa.
 
 **Related Fields:**
 
 - `expiresAt`: thời điểm hết hạn của session.
+- `absoluteExpiresAt`: hạn cứng của session, tối đa 30 ngày kể từ lúc tạo.
 
 **General Notes:**
 

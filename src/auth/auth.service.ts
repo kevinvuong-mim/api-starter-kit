@@ -51,15 +51,16 @@ export class AuthService {
   }
 
   private async createSession(userId: string, deviceInfo?: DeviceInfo) {
-    const expiresAt = new Date();
-
-    expiresAt.setTime(expiresAt.getTime() + AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRATION);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRATION);
+    const absoluteExpiresAt = new Date(now.getTime() + AUTH_CONSTANTS.SESSION_ABSOLUTE_EXPIRATION);
 
     return this.prisma.session.create({
       data: {
         userId,
         expiresAt,
         refreshToken: '', // Will be updated after token generation
+        absoluteExpiresAt,
         lastUsedAt: new Date(),
         ipAddress: deviceInfo?.ipAddress,
         userAgent: deviceInfo?.userAgent,
@@ -70,11 +71,14 @@ export class AuthService {
   }
 
   private async enforceSessionLimit(userId: string): Promise<void> {
+    const now = new Date();
+
     const activeTokens = await this.prisma.session.findMany({
       orderBy: { lastUsedAt: 'asc' },
       where: {
         userId,
-        expiresAt: { gte: new Date() },
+        expiresAt: { gte: now },
+        absoluteExpiresAt: { gte: now },
       },
     });
 
@@ -242,6 +246,8 @@ export class AuthService {
   async refreshTokens(refreshToken: string, deviceInfo?: DeviceInfo) {
     if (!refreshToken) throw new BadRequestException('Refresh token not provided');
 
+    const now = new Date();
+
     // Verify refresh token with JWT first
     let payload;
     try {
@@ -270,10 +276,16 @@ export class AuthService {
     if (!tokenRecord) throw new UnauthorizedException('Invalid refresh token');
 
     // Check if token has expired
-    if (tokenRecord.expiresAt < new Date()) {
+    if (tokenRecord.expiresAt < now) {
       await this.prisma.session.delete({ where: { id: tokenRecord.id } });
 
       throw new UnauthorizedException('Refresh token has expired');
+    }
+
+    if (tokenRecord.absoluteExpiresAt < now) {
+      await this.prisma.session.delete({ where: { id: tokenRecord.id } });
+
+      throw new UnauthorizedException('Session has expired');
     }
 
     // Generate new tokens
@@ -288,6 +300,7 @@ export class AuthService {
       data: {
         lastUsedAt: new Date(),
         refreshToken: hashedRefreshToken,
+        expiresAt: new Date(now.getTime() + AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRATION),
         // Update device info if provided
         ...(deviceInfo && {
           ipAddress: deviceInfo.ipAddress,

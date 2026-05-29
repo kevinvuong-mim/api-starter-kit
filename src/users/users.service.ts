@@ -185,9 +185,12 @@ export class UsersService {
     limit: number = 10,
     skip: number = 0,
   ) {
+    const now = new Date();
+
     const where = {
       userId,
-      expiresAt: { gte: new Date() },
+      expiresAt: { gte: now },
+      absoluteExpiresAt: { gte: now },
     };
 
     const [sessions, total] = await Promise.all([
@@ -208,6 +211,7 @@ export class UsersService {
       ipAddress: session.ipAddress || 'Unknown',
       deviceName: session.deviceName || 'Unknown',
       deviceType: session.deviceType || 'Unknown',
+      absoluteExpiresAt: session.absoluteExpiresAt,
       isCurrent: currentSessionId ? session.id === currentSessionId : false,
     }));
 

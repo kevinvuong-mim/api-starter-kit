@@ -62,15 +62,17 @@ model Session {
   createdAt DateTime @default(now())
 
   // Session Data
-  expiresAt    DateTime
-  refreshToken String
-  lastUsedAt   DateTime @default(now())
+  expiresAt         DateTime
+  absoluteExpiresAt DateTime
+  refreshToken      String
+  lastUsedAt        DateTime @default(now())
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([absoluteExpiresAt])
   @@index([lastUsedAt])
   @@map("sessions")
 }

@@ -15,6 +15,7 @@ API xác thực người dùng thông qua Google OAuth 2.0. Cho phép người d
 - Session management với device tracking
 - HttpOnly cookies với SameSite=Lax
 - Maximum 10 concurrent sessions per user
+- Session tối đa 30 ngày kể từ lúc tạo
 
 ---
 
@@ -161,7 +162,7 @@ Set-Cookie: refreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secu
 - `HttpOnly`: true (không thể access bằng JavaScript)
 - `Secure`: true trong production (NODE_ENV=production)
 - `SameSite`: lax (CSRF protection)
-- `MaxAge`: 3600s (1 hour) cho accessToken, 604800s (7 days) cho refreshToken
+- `MaxAge`: 3600s (1 hour) cho accessToken, 604800s (7 days) cho refreshToken; session vẫn bị giới hạn tuyệt đối 30 ngày ở backend
 - `Path`: / (available cho tất cả routes)
 
 **Error Responses**
@@ -217,7 +218,7 @@ Set-Cookie: refreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secu
      isActive: true                     // Default active
    }
    ```
-3. Generate JWT access token (1h) và refresh token (7d)
+3. Generate JWT access token (1h) và refresh token (7d, sliding)
 4. Create session với device info
 5. Set HttpOnly cookies
 6. Redirect to frontend
@@ -279,13 +280,15 @@ Set-Cookie: refreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secu
 - **Cleanup**: Session cũ nhất (theo `lastUsedAt`) bị xóa khi vượt limit
 - **Token Expiry**:
   - Access token: 1 hour
-  - Refresh token: 7 days
+  - Refresh token: 7 days (sliding)
+  - Session absolute expiry: 30 days
 - **Session Fields**:
   ```typescript
   {
     refreshToken: string,  // Hashed với bcrypt (salt rounds = 10)
     userId: string,
     expiresAt: Date,
+    absoluteExpiresAt: Date,
     deviceName: string,
     deviceType: string,
     ipAddress: string,
@@ -294,7 +297,7 @@ Set-Cookie: refreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secu
     createdAt: Date
   }
   ```
-- **Security**: Refresh token được hash trước khi lưu vào database để tăng cường bảo mật
+- **Security**: Refresh token được hash trước khi lưu vào database để tăng cường bảo mật, và session bị buộc logout sau tối đa 30 ngày
 
 ---
 

@@ -78,9 +78,13 @@ export class CleanupService {
     this.logger.log('Starting cleanup of expired sessions...');
 
     try {
+      const now = new Date();
+
       // Delete expired sessions
       const result = await this.prisma.session.deleteMany({
-        where: { expiresAt: { lt: new Date() } },
+        where: {
+          OR: [{ expiresAt: { lt: now } }, { absoluteExpiresAt: { lt: now } }],
+        },
       });
 
       this.logger.log(`Cleanup completed. Deleted ${result.count} expired sessions.`);

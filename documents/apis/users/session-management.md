@@ -54,6 +54,7 @@ Cookie: accessToken=<token>
       "createdAt": "2025-11-07T08:00:00.000Z",
       "lastUsedAt": "2025-11-07T10:30:00.000Z",
       "expiresAt": "2025-11-14T08:00:00.000Z",
+      "absoluteExpiresAt": "2025-12-07T08:00:00.000Z",
       "isCurrent": true
     },
     {
@@ -64,6 +65,7 @@ Cookie: accessToken=<token>
       "createdAt": "2025-11-06T15:20:00.000Z",
       "lastUsedAt": "2025-11-06T18:45:00.000Z",
       "expiresAt": "2025-11-13T15:20:00.000Z",
+      "absoluteExpiresAt": "2025-12-06T15:20:00.000Z",
       "isCurrent": false
     }
   ],
@@ -78,24 +80,25 @@ Cookie: accessToken=<token>
 }
 ```
 
-| Field                | Type    | Description                            |
-| -------------------- | ------- | -------------------------------------- |
-| items                | array   | Danh sách các phiên đăng nhập          |
-| items[].id           | string  | Session ID (để dùng cho logout device) |
-| items[].deviceName   | string  | Tên thiết bị (browser + OS)            |
-| items[].deviceType   | string  | Loại thiết bị: Desktop, Mobile, Tablet |
-| items[].ipAddress    | string  | Địa chỉ IP của thiết bị                |
-| items[].createdAt    | string  | Thời điểm tạo session (ISO 8601)       |
-| items[].lastUsedAt   | string  | Lần cuối sử dụng (ISO 8601)            |
-| items[].expiresAt    | string  | Thời điểm hết hạn (ISO 8601)           |
-| items[].isCurrent    | boolean | true nếu là thiết bị hiện tại          |
-| meta                 | object  | Thông tin phân trang                   |
-| meta.total           | number  | Tổng số sessions                       |
-| meta.page            | number  | Trang hiện tại                         |
-| meta.perPage         | number  | Số lượng sessions mỗi trang            |
-| meta.totalPages      | number  | Tổng số trang                          |
-| meta.hasNextPage     | boolean | Có trang tiếp theo hay không           |
-| meta.hasPreviousPage | boolean | Có trang trước hay không               |
+| Field                     | Type    | Description                            |
+| ------------------------- | ------- | -------------------------------------- |
+| items                     | array   | Danh sách các phiên đăng nhập          |
+| items[].id                | string  | Session ID (để dùng cho logout device) |
+| items[].deviceName        | string  | Tên thiết bị (browser + OS)            |
+| items[].deviceType        | string  | Loại thiết bị: Desktop, Mobile, Tablet |
+| items[].ipAddress         | string  | Địa chỉ IP của thiết bị                |
+| items[].createdAt         | string  | Thời điểm tạo session (ISO 8601)       |
+| items[].lastUsedAt        | string  | Lần cuối sử dụng (ISO 8601)            |
+| items[].expiresAt         | string  | Thời điểm hết hạn (ISO 8601)           |
+| items[].absoluteExpiresAt | string  | Hạn cứng của session (tối đa 30 ngày)  |
+| items[].isCurrent         | boolean | true nếu là thiết bị hiện tại          |
+| meta                      | object  | Thông tin phân trang                   |
+| meta.total                | number  | Tổng số sessions                       |
+| meta.page                 | number  | Trang hiện tại                         |
+| meta.perPage              | number  | Số lượng sessions mỗi trang            |
+| meta.totalPages           | number  | Tổng số trang                          |
+| meta.hasNextPage          | boolean | Có trang tiếp theo hay không           |
+| meta.hasPreviousPage      | boolean | Có trang trước hay không               |
 
 **Error Responses**
 
@@ -170,7 +173,7 @@ curl -X GET "http://localhost:3000/users/sessions?page=1&limit=20" \
   - Default: `page=1`, `limit=10`
   - Limit range: 1-100 (values >100 will be capped at 100)
   - Invalid page numbers (<1) will default to 1
-- Chỉ hiển thị sessions chưa hết hạn (`expiresAt >= now`)
+- Chỉ hiển thị sessions còn hợp lệ theo cả `expiresAt >= now` và `absoluteExpiresAt >= now`
 - Sessions được sắp xếp theo `lastUsedAt` giảm dần (mới nhất trước)
 - `isCurrent` được set `true` tự động dựa trên `sessionId` trong JWT access token
 - JWT payload structure:
@@ -419,6 +422,8 @@ Sessions được tạo tự động khi:
 ### Session Expiry
 
 - **Refresh Token TTL**: 7 ngày (cấu hình trong `AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRATION`)
+- **Refresh Token TTL**: 7 ngày (sliding window, cấu hình trong `AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRATION`)
+- **Session Absolute TTL**: 30 ngày (cấu hình trong `AUTH_CONSTANTS.SESSION_ABSOLUTE_EXPIRATION`)
 - **Auto cleanup**: Expired sessions được tự động xóa bởi cleanup service
 - **Manual cleanup**: User có thể xóa bất kỳ lúc nào
 
@@ -533,13 +538,14 @@ Sessions được tạo tự động khi:
 
 - Token hết hạn
 - User chưa login
-- Tất cả sessions đã expired
+- Tất cả sessions đã expired hoặc đã vượt quá 30 ngày
 
 **Solution**:
 
 - Check access token còn valid
 - Login lại nếu cần
 - Check `expiresAt` của sessions
+- Check cả `absoluteExpiresAt` của sessions
 
 ### Problem: Cannot delete session
 

@@ -9,4 +9,5 @@ export const AUTH_CONSTANTS = {
   // Token expiration times in milliseconds
   ACCESS_TOKEN_EXPIRATION: 60 * 60 * 1000, // 1 hour
   REFRESH_TOKEN_EXPIRATION: 7 * 24 * 60 * 60 * 1000, // 7 days
+  SESSION_ABSOLUTE_EXPIRATION: 30 * 24 * 60 * 60 * 1000, // 30 days
 };
