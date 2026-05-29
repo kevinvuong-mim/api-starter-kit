@@ -70,6 +70,31 @@ export class AuthService {
     });
   }
 
+  private async findSessionByRefreshToken(refreshToken: string) {
+    let payload: { sub: string; sessionId: string };
+
+    try {
+      payload = await this.jwtService.verifyAsync<{ sub: string; sessionId: string }>(
+        refreshToken,
+        { secret: process.env.JWT_REFRESH_SECRET },
+      );
+    } catch {
+      return null;
+    }
+
+    const session = await this.prisma.session.findUnique({
+      where: { id: payload.sessionId },
+    });
+
+    if (!session || session.userId !== payload.sub) {
+      return null;
+    }
+
+    const isMatch = await bcrypt.compare(refreshToken, session.refreshToken);
+
+    return isMatch ? session : null;
+  }
+
   private async enforceSessionLimit(userId: string): Promise<void> {
     const now = new Date();
 
@@ -222,22 +247,11 @@ export class AuthService {
   async logout(userId: string, refreshToken: string) {
     if (!refreshToken) throw new BadRequestException('Refresh token not provided');
 
-    // Find all sessions for the user
-    const userSessions = await this.prisma.session.findMany({
-      where: { userId },
-    });
+    const matchingSession = await this.findSessionByRefreshToken(refreshToken);
 
-    // Find the matching session by comparing hashed tokens
-    let matchingSession = null;
-    for (const session of userSessions) {
-      const isMatch = await bcrypt.compare(refreshToken, session.refreshToken);
-      if (isMatch) {
-        matchingSession = session;
-        break;
-      }
+    if (!matchingSession || matchingSession.userId !== userId) {
+      throw new BadRequestException('Invalid refresh token');
     }
-
-    if (!matchingSession) throw new BadRequestException('Invalid refresh token');
 
     // Delete refresh token from database
     await this.prisma.session.delete({ where: { id: matchingSession.id } });
@@ -248,30 +262,7 @@ export class AuthService {
 
     const now = new Date();
 
-    // Verify refresh token with JWT first
-    let payload;
-    try {
-      payload = await this.jwtService.verifyAsync(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET,
-      });
-    } catch {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    // Get all sessions and find the matching one by comparing hashed tokens
-    const allSessions = await this.prisma.session.findMany({
-      include: { user: true },
-      where: { userId: payload.sub },
-    });
-
-    let tokenRecord = null;
-    for (const session of allSessions) {
-      const isMatch = await bcrypt.compare(refreshToken, session.refreshToken);
-      if (isMatch) {
-        tokenRecord = session;
-        break;
-      }
-    }
+    const tokenRecord = await this.findSessionByRefreshToken(refreshToken);
 
     if (!tokenRecord) throw new UnauthorizedException('Invalid refresh token');
 
@@ -289,7 +280,7 @@ export class AuthService {
     }
 
     // Generate new tokens
-    const tokens = await this.generateTokens(tokenRecord.user.id, tokenRecord.id);
+    const tokens = await this.generateTokens(tokenRecord.userId, tokenRecord.id);
 
     // Hash new refresh token before storing
     const hashedRefreshToken = await bcrypt.hash(tokens.refreshToken, 10);
