@@ -30,6 +30,7 @@ CREATE TABLE "sessions" (
     "userAgent" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expiresAt" TIMESTAMP(3) NOT NULL,
+    "absoluteExpiresAt" TIMESTAMP(3) NOT NULL,
     "refreshToken" TEXT NOT NULL,
     "lastUsedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -59,6 +60,9 @@ CREATE INDEX "sessions_userId_idx" ON "sessions"("userId");
 
 -- CreateIndex
 CREATE INDEX "sessions_expiresAt_idx" ON "sessions"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "sessions_absoluteExpiresAt_idx" ON "sessions"("absoluteExpiresAt");
 
 -- CreateIndex
 CREATE INDEX "sessions_lastUsedAt_idx" ON "sessions"("lastUsedAt");
