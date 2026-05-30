@@ -21,6 +21,7 @@ import { RefreshTokenDto } from '@/auth/dto/refresh-token.dto';
 import { DeviceUtil, extractFrontendUrl } from '@/common/utils';
 import { GoogleAuthGuard } from '@/auth/guards/google-auth.guard';
 import { Public, CurrentUser, type UserPayload } from '@/common/decorators';
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}

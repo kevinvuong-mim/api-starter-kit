@@ -555,6 +555,9 @@ MAIL_FROM="noreply@mimkat.com"
 MAIL_USER="your-email@gmail.com"
 MAIL_PASSWORD="your-app-password"
 
+# Redis
+REDIS_URL="redis://localhost:6379"
+
 # CORS
 CORS_ORIGIN="http://localhost:3001, http://localhost:3002"
 
