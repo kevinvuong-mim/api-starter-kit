@@ -6,8 +6,8 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 
-export const METADATA_MAX_BYTES = 2048;
 export const METADATA_MAX_KEYS = 10;
+export const METADATA_MAX_BYTES = 2048;
 export const METADATA_MAX_KEY_LENGTH = 64;
 export const METADATA_MAX_STRING_LENGTH = 256;
 
