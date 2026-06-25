@@ -1,17 +1,17 @@
 import { Injectable } from '@nestjs/common';
 
-import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
-import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
+import { GameRegistryService } from '@/modules/game/game-registry.service';
+import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { LeaderboardQueryDto } from '@/modules/leaderboard/dto/leaderboard-query.dto';
 import { LeaderboardResponseDto } from '@/modules/leaderboard/dto/leaderboard-response.dto';
 
 @Injectable()
 export class LeaderboardService {
   constructor(
-    private readonly redisRankingService: RedisRankingService,
-    private readonly gameRegistryService: GameRegistryService,
     private readonly prisma: PrismaService,
+    private readonly gameRegistryService: GameRegistryService,
+    private readonly redisRankingService: RedisRankingService,
   ) {}
 
   async getGlobalLeaderboard(query: LeaderboardQueryDto): Promise<LeaderboardResponseDto> {

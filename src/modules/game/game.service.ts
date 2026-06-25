@@ -1,23 +1,23 @@
 import { Injectable } from '@nestjs/common';
 
 import { GuestService } from '@/modules/guest/guest.service';
-import { ReplayService } from '@/modules/replay/replay.service';
-import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
-import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameRepository } from '@/modules/game/game.repository';
-import { GameRegistryService } from '@/modules/game/game-registry.service';
+import { ReplayService } from '@/modules/replay/replay.service';
+import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';
+import { GameRegistryService } from '@/modules/game/game-registry.service';
+import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { SyncGameResultsResponseDto } from '@/modules/game/dto/sync-game-results-response.dto';
 
 @Injectable()
 export class GameService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly guestService: GuestService,
     private readonly replayService: ReplayService,
+    private readonly gameRepository: GameRepository,
     private readonly gameRegistryService: GameRegistryService,
     private readonly redisRankingService: RedisRankingService,
-    private readonly gameRepository: GameRepository,
-    private readonly prisma: PrismaService,
   ) {}
 
   async syncResults(

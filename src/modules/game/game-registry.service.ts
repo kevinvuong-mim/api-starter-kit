@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Game } from '@prisma/client';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
@@ -9,8 +9,8 @@ export class GameRegistryService {
 
   getActiveGames(): Promise<Game[]> {
     return this.prisma.game.findMany({
-      where: { isActive: true },
       orderBy: { id: 'asc' },
+      where: { isActive: true },
     });
   }
 

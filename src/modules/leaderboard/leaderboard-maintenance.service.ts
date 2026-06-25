@@ -1,18 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { Logger, Injectable } from '@nestjs/common';
 
+import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
-import { PrismaService } from '@/modules/prisma/prisma.service';
 
 @Injectable()
 export class LeaderboardMaintenanceService {
   private readonly logger = new Logger(LeaderboardMaintenanceService.name);
 
   constructor(
+    private readonly prisma: PrismaService,
     private readonly gameRegistryService: GameRegistryService,
     private readonly redisRankingService: RedisRankingService,
-    private readonly prisma: PrismaService,
   ) {}
 
   @Cron('0 3 * * *')
@@ -24,8 +24,8 @@ export class LeaderboardMaintenanceService {
     for (const game of games) {
       const entries = await this.prisma.leaderboard.findMany({
         where: { gameId: game.id },
-        select: { guestId: true, bestScore: true },
         orderBy: { bestScore: 'desc' },
+        select: { guestId: true, bestScore: true },
       });
 
       await this.redisRankingService.rebuildGlobal(game.id, entries);

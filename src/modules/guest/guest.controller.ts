@@ -1,8 +1,8 @@
-import { Body, Patch, Post, Controller } from '@nestjs/common';
+import { Body, Post, Patch, Controller } from '@nestjs/common';
 
 import { GuestService } from '@/modules/guest/guest.service';
-import { InitGuestResponseDto } from '@/modules/guest/dto/init-guest-response.dto';
 import { UpdateGuestNameDto } from '@/modules/guest/dto/update-guest-name.dto';
+import { InitGuestResponseDto } from '@/modules/guest/dto/init-guest-response.dto';
 import { GuestProfileResponseDto } from '@/modules/guest/dto/guest-profile-response.dto';
 
 @Controller('guest')

@@ -1,31 +1,31 @@
-import { Type } from 'class-transformer';
 import {
   Min,
   IsInt,
+  IsUUID,
   IsArray,
   IsString,
-  IsUUID,
   IsObject,
   IsOptional,
-  ValidateNested,
-  ArrayMinSize,
   ArrayMaxSize,
+  ArrayMinSize,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class GameResultDto {
-  @IsInt()
   @Min(0)
+  @IsInt()
   score!: number;
 
-  @IsInt()
   @Min(0)
+  @IsInt()
   duration!: number;
 
   @IsString()
   replayHash!: string;
 
-  @IsOptional()
   @IsObject()
+  @IsOptional()
   metadata?: Record<string, unknown>;
 }
 
@@ -39,7 +39,7 @@ export class SyncGameResultsDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(50)
-  @ValidateNested({ each: true })
   @Type(() => GameResultDto)
+  @ValidateNested({ each: true })
   results!: GameResultDto[];
 }

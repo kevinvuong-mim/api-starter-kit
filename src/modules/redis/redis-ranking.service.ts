@@ -1,8 +1,8 @@
 import Redis from 'ioredis';
-import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 
-import { REDIS_CLIENT, REDIS_KEYS, LeaderboardEntry } from '@/modules/redis/redis.constants';
+import { REDIS_KEYS, REDIS_CLIENT, LeaderboardEntry } from '@/modules/redis/redis.constants';
 
 const LEADERBOARD_TOP_LIMIT = 100;
 

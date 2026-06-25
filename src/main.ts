@@ -1,15 +1,27 @@
 import helmet from 'helmet';
 import compression from 'compression';
-import cookieParser from 'cookie-parser';
-import { NestFactory } from '@nestjs/core';
-import { Logger, HttpException, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '@/app.module';
+import { NestFactory } from '@nestjs/core';
 import { HttpExceptionFilter } from '@/common/filters';
 import { ResponseInterceptor } from '@/common/interceptors';
+import { Logger, HttpException, ValidationPipe } from '@nestjs/common';
+
+function parseCorsOrigins(value: string | undefined): string[] | string {
+  if (!value) return '*';
+
+  const origins = value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return origins.length > 0 ? origins : '*';
+}
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+
+  app.setGlobalPrefix('api');
 
   // Helmet - Security headers middleware
   app.use(
@@ -22,16 +34,11 @@ async function bootstrap() {
     }),
   );
 
-  // Enable CORS - Support both Bearer token and cookies
   app.enableCors({
-    credentials: true, // Allow cookies to be sent
+    allowedHeaders: ['Content-Type'],
+    origin: parseCorsOrigins(process.env.CORS_ORIGIN),
     methods: ['GET', 'PUT', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Client-Type'],
-    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(', ').filter(Boolean) : '*',
   });
-
-  // Cookie parser middleware
-  app.use(cookieParser());
 
   // Global validation pipe với whitelist để tránh mass assignment
   app.useGlobalPipes(
@@ -86,7 +93,7 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
 
   await app.listen(port);
-  logger.log(`🚀 Application is running on: http://localhost:${port}`);
+  logger.log(`🚀 Application is running on: http://localhost:${port}/api`);
 }
 
 bootstrap().catch((err) => {

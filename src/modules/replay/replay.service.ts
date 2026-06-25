@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 
-import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
+  ReplayViolation,
   ReplayValidationInput,
   ReplayValidationResult,
-  ReplayViolation,
 } from '@/modules/replay/replay.types';
+import { PrismaService } from '@/modules/prisma/prisma.service';
 
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/i;
 
@@ -17,8 +17,8 @@ export class ReplayService {
     if (!replayHash || replayHash.trim().length === 0) {
       return {
         valid: false,
-        violation: ReplayViolation.MISSING_REPLAY_HASH,
         message: 'Replay hash is required',
+        violation: ReplayViolation.MISSING_REPLAY_HASH,
       };
     }
 

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 
-import { GuestController } from '@/modules/guest/guest.controller';
 import { GuestService } from '@/modules/guest/guest.service';
+import { GuestController } from '@/modules/guest/guest.controller';
 import { GuestRepository } from '@/modules/guest/guest.repository';
 
 @Module({

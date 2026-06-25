@@ -1,4 +1,4 @@
-import { Body, Post, Controller } from '@nestjs/common';
+import { Post, Body, Controller } from '@nestjs/common';
 
 import { GameService } from '@/modules/game/game.service';
 import { SyncGameResultsDto } from '@/modules/game/dto/sync-game-results.dto';

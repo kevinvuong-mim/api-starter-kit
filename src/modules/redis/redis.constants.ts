@@ -5,7 +5,7 @@ export const REDIS_KEYS = {
 } as const;
 
 export interface LeaderboardEntry {
-  guestId: string;
-  score: number;
   rank: number;
+  score: number;
+  guestId: string;
 }
