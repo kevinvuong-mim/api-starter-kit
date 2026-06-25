@@ -1,6 +1,6 @@
 # Hướng dẫn sử dụng Docker cho Database và Redis
 
-Tài liệu này hướng dẫn cách sử dụng Docker để chạy PostgreSQL và Redis cho dự án mimkat-api.
+Tài liệu này hướng dẫn cách sử dụng Docker để chạy PostgreSQL và Redis cho dự án game-api.
 
 ## Tại sao nên dùng Docker?
 
@@ -59,9 +59,9 @@ services:
       - '5432:5432'
     restart: unless-stopped
     image: postgres:16-alpine
-    container_name: mimkat-postgres
+    container_name: game-postgres
     environment:
-      POSTGRES_DB: mimkat
+      POSTGRES_DB: game
       POSTGRES_USER: kwong2000
       POSTGRES_PASSWORD: 1234abcd
     volumes:
@@ -77,7 +77,7 @@ services:
       - '6379:6379'
     restart: unless-stopped
     image: redis:8.6-alpine
-    container_name: mimkat-redis
+    container_name: game-redis
     volumes:
       - redis_data:/data
     healthcheck:
@@ -101,7 +101,7 @@ Khi sử dụng Docker, các service sẽ có thông tin kết nối:
 
 - **Port**: `5432`
 - **Host**: `localhost`
-- **Database**: `mimkat`
+- **Database**: `game`
 - **Password**: `1234abcd`
 - **Username**: `kwong2000`
 
@@ -114,7 +114,7 @@ Khi sử dụng Docker, các service sẽ có thông tin kết nối:
 **Connection String cho .env:**
 
 ```env
-DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/mimkat"
+DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
 REDIS_URL="redis://localhost:6379"
 ```
 
@@ -139,7 +139,7 @@ docker-compose ps
 docker ps
 ```
 
-Bạn sẽ thấy 2 container `mimkat-postgres` và `mimkat-redis` đang chạy.
+Bạn sẽ thấy 2 container `game-postgres` và `game-redis` đang chạy.
 
 ### 3. Xem logs
 
@@ -193,10 +193,10 @@ PONG
 
 ```bash
 # Từ docker-compose
-docker-compose exec postgres psql -U kwong2000 -d mimkat
+docker-compose exec postgres psql -U kwong2000 -d game
 
 # Hoặc từ docker
-docker exec -it mimkat-postgres psql -U kwong2000 -d mimkat
+docker exec -it game-postgres psql -U kwong2000 -d game
 ```
 
 Sau đó bạn có thể chạy SQL commands:
@@ -232,17 +232,17 @@ npm run prisma:migrate
 
 ```bash
 # Export database ra file
-docker-compose exec postgres pg_dump -U kwong2000 mimkat > backup.sql
+docker-compose exec postgres pg_dump -U kwong2000 game > backup.sql
 
 # Hoặc với timestamp
-docker-compose exec postgres pg_dump -U kwong2000 mimkat > backup-$(date +%Y%m%d-%H%M%S).sql
+docker-compose exec postgres pg_dump -U kwong2000 game > backup-$(date +%Y%m%d-%H%M%S).sql
 ```
 
 ### Restore database từ backup
 
 ```bash
 # Import từ file backup
-docker-compose exec -T postgres psql -U kwong2000 mimkat < backup.sql
+docker-compose exec -T postgres psql -U kwong2000 game < backup.sql
 ```
 
 ### Kết nối vào Redis CLI
@@ -311,7 +311,7 @@ ports:
 Và cập nhật `DATABASE_URL`:
 
 ```env
-DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5433/mimkat"
+DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5433/game"
 ```
 
 ### Port 6379 đã được sử dụng
@@ -445,7 +445,7 @@ docker-compose logs -f redis
 docker-compose ps
 
 # Kết nối PostgreSQL CLI
-docker-compose exec postgres psql -U kwong2000 -d mimkat
+docker-compose exec postgres psql -U kwong2000 -d game
 
 # Kết nối Redis CLI
 docker-compose exec redis redis-cli
@@ -454,10 +454,10 @@ docker-compose exec redis redis-cli
 docker-compose exec redis redis-cli ping
 
 # Backup
-docker-compose exec postgres pg_dump -U kwong2000 mimkat > backup.sql
+docker-compose exec postgres pg_dump -U kwong2000 game > backup.sql
 
 # Restore
-docker-compose exec -T postgres psql -U kwong2000 mimkat < backup.sql
+docker-compose exec -T postgres psql -U kwong2000 game < backup.sql
 ```
 
 ---

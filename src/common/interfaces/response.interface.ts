@@ -9,20 +9,6 @@ interface ErrorResponse {
   errors?: ValidationError[];
 }
 
-interface PaginatedData<T> {
-  items: T[];
-  meta: PaginationMeta;
-}
-
-interface PaginationMeta {
-  page: number;
-  total: number;
-  perPage: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-}
-
 interface SuccessResponse<T = any> {
   data?: T;
   path: string;
@@ -38,4 +24,4 @@ interface ValidationError {
   message: string;
 }
 
-export type { ErrorResponse, PaginatedData, PaginationMeta, SuccessResponse, ValidationError };
+export type { ErrorResponse, SuccessResponse, ValidationError };

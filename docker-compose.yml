@@ -7,10 +7,10 @@ services:
     restart: unless-stopped
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: mimkat
+      POSTGRES_DB: game
       POSTGRES_USER: kwong2000
       POSTGRES_PASSWORD: 1234abcd
-    container_name: mimkat-postgres
+    container_name: game-postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +24,7 @@ services:
       - '6379:6379'
     restart: unless-stopped
     image: redis:8.6-alpine
-    container_name: mimkat-redis
+    container_name: game-redis
     volumes:
       - redis_data:/data
     healthcheck:

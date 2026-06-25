@@ -1,6 +1,6 @@
-# Mimkat API
+# Game API
 
-Backend API for Mimkat application built with NestJS, PostgreSQL, and Prisma ORM.
+Backend API for game application built with NestJS, PostgreSQL, and Prisma ORM.
 
 ## 📋 Table of Contents
 
@@ -27,23 +27,6 @@ Backend API for Mimkat application built with NestJS, PostgreSQL, and Prisma ORM
 - **[PostgreSQL](https://www.postgresql.org/)** - Relational database
 - **[Prisma](https://www.prisma.io/)** - Next-generation ORM
 
-### Authentication
-
-- **[Passport](http://www.passportjs.org/)** - Authentication middleware
-- **[JWT](https://jwt.io/)** - JSON Web Token
-- **[Google OAuth 2.0](https://developers.google.com/identity/protocols/oauth2)** - Social login
-
-### Storage & Media
-
-- **[AWS S3](https://aws.amazon.com/s3/)** - Cloud storage
-- **[Sharp](https://sharp.pixelplumbing.com/)** - High performance image processing
-
-### Email
-
-- **[Nodemailer](https://nodemailer.com/)** - Email sending library
-- **[BullMQ](https://docs.bullmq.io/)** - Background job queue
-- **[Redis](https://redis.io/)** - Queue broker and job state storage
-
 ### Security & Utilities
 
 - **[Helmet](https://helmetjs.github.io/)** - Security headers
@@ -65,8 +48,8 @@ Backend API for Mimkat application built with NestJS, PostgreSQL, and Prisma ORM
 ### 1. Clone repository
 
 ```bash
-git clone https://github.com/kevinvuong-mim/mimkat-api.git
-cd mimkat-api
+git clone https://github.com/kevinvuong-mim/game-api.git
+cd game-api
 ```
 
 ### 2. Install dependencies
@@ -97,7 +80,7 @@ This will start:
 
 - Password: `1234abcd`
 - Username: `kwong2000`
-- Database name: `mimkat`
+- Database name: `game`
 - PostgreSQL on port `5432`
 
 ### 5. Run migrations
@@ -122,37 +105,14 @@ Create a `.env` file in the root directory with the following environment variab
 
 ```env
 # Database
-DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/mimkat"
+DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
 
-# JWT
-JWT_SECRET="your-jwt-secret-key-at-least-32-chars"
-JWT_REFRESH_SECRET="your-jwt-refresh-secret-key-at-least-32-chars"
-
-# Google OAuth
-GOOGLE_CLIENT_ID="your-google-client-id"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
-GOOGLE_CALLBACK_URL="http://localhost:3000/auth/google/callback"
-
-# Email
-MAIL_PORT=587
-MAIL_HOST="smtp.gmail.com"
-MAIL_FROM="noreply@mimkat.com"
-MAIL_USER="your-email@gmail.com"
-MAIL_PASSWORD="your-app-password"
-
-# CORS
-CORS_ORIGIN="http://localhost:3001, http://localhost:3002"
+# Redis
+REDIS_URL="redis://localhost:6379"
 
 # Server
 PORT=3000
 NODE_ENV="development"
-
-# AWS S3 Configuration
-AWS_REGION="ap-southeast-1"
-AWS_BUCKET_NAME="mimkat-storage"
-AWS_ACCESS_KEY_ID="your-access-key"
-AWS_ENDPOINT="https://oss.s3.mimkat.vn"
-AWS_SECRET_ACCESS_KEY="your-secret-key"
 ```
 
 📘 **For detailed instructions on obtaining environment variables**: See [Environment Variables Guide](./documents/setup/environment-variables.md)
@@ -220,39 +180,20 @@ docker-compose down      # Stop database
 ## 📁 Project Structure
 
 ```
-mimkat-api/
+game-api/
 ├── documents/             # Project documentation
-│   ├── apis/              # API documentation
-│   │   ├── auth/          # Auth endpoints docs
-│   │   ├── users/         # User endpoints docs
-│   │   └── verification/  # Verification endpoints docs
-│   ├── modules/           # Module documentation
 │   └── setup/             # Setup guides
 ├── prisma/
 │   ├── schema.prisma      # Database schema
 │   └── migrations/        # Database migrations
 ├── src/
-│   ├── auth/              # Authentication module
-│   │   ├── guards/        # Auth guards (JWT, Google)
-│   │   ├── strategies/    # Passport strategies
-│   │   └── dto/           # Auth DTOs
-│   ├── users/             # User management module
-│   │   └── dto/           # User DTOs
-│   ├── verification/      # Email verification & password reset
-│   │   └── dto/           # Verification DTOs
-│   ├── mail/              # Email service
-│   ├── storage/           # File storage (S3)
-│   │   └── providers/     # Storage providers
-│   ├── image-processing/  # Image optimization
 │   ├── prisma/            # Prisma service
-│   ├── tasks/             # Background tasks
 │   ├── common/            # Shared utilities
 │   │   ├── decorators/    # Custom decorators
 │   │   ├── filters/       # Exception filters
 │   │   ├── interceptors/  # Response interceptors
 │   │   ├── interfaces/    # Shared interfaces
-│   │   ├── utils/         # Utility functions
-│   │   └── validators/    # Validators
+│   │   └──  utils/         # Utility functions
 │   ├── app.module.ts      # Root module
 │   └── main.ts            # Application entry point
 ├── test/                  # Test files
@@ -291,10 +232,7 @@ Ensure all production environment variables are properly configured:
 
 - `NODE_ENV=production`
 - Production database URL
-- JWT secrets (different from development)
-- AWS credentials
-- SMTP credentials
-- CORS_ORIGIN (production frontend URL)
+- Production Redis URL
 
 ### 3. Run migrations
 
