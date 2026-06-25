@@ -1,12 +1,18 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AppService } from '@/app.service';
 import { AppController } from '@/app.controller';
-import { PrismaModule } from '@/prisma/prisma.module';
+import { AppConfigModule } from '@/config/config.module';
+import { PrismaModule } from '@/modules/prisma/prisma.module';
+import { RedisModule } from '@/modules/redis/redis.module';
+import { GuestModule } from '@/modules/guest/guest.module';
+import { AntiCheatModule } from '@/modules/anti-cheat/anti-cheat.module';
+import { SeasonModule } from '@/modules/season/season.module';
+import { GameSessionModule } from '@/modules/game-session/game-session.module';
+import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
 import { HttpExceptionFilter } from '@/common/filters';
 
 @Module({
@@ -23,21 +29,21 @@ import { HttpExceptionFilter } from '@/common/filters';
     },
   ],
   imports: [
+    AppConfigModule,
+    ScheduleModule.forRoot(),
     PrismaModule,
+    RedisModule,
+    GuestModule,
+    AntiCheatModule,
+    SeasonModule,
+    GameSessionModule,
+    LeaderboardModule,
     ThrottlerModule.forRoot([
       {
-        ttl: 60000, // 60 seconds
-        limit: 100, // 100 requests per ttl
+        ttl: 60000,
+        limit: 100,
       },
     ]),
-    ConfigModule.forRoot({ isGlobal: true }),
-    BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        connection: { url: configService.get<string>('REDIS_URL') },
-      }),
-    }),
   ],
 })
 export class AppModule {}

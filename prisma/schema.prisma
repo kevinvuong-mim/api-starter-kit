@@ -6,3 +6,84 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum GuestStatus {
+  NORMAL
+  SHADOW
+  BLOCKED
+}
+
+enum SeasonType {
+  WEEKLY
+}
+
+model GuestPlayer {
+  id           String      @id @default(uuid())
+  createdAt    DateTime    @default(now())
+  lastActiveAt DateTime    @default(now())
+  trustScore   Int         @default(100)
+  status       GuestStatus @default(NORMAL)
+
+  gameResults       GameResult[]
+  leaderboardGlobal LeaderboardGlobal?
+  leaderboardWeekly LeaderboardWeekly[]
+
+  @@map("guest_players")
+}
+
+model GameResult {
+  id            String   @id @default(uuid())
+  guestId       String
+  score         Int
+  duration      Int
+  seed          Int
+  moves         Json
+  replayHash    String   @unique
+  clientVersion String?
+  createdAt     DateTime @default(now())
+  synced        Boolean  @default(true)
+
+  guest GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([guestId])
+  @@index([score(sort: Desc)])
+  @@map("game_results")
+}
+
+model Season {
+  id        String     @id @default(uuid())
+  type      SeasonType @default(WEEKLY)
+  startedAt DateTime   @default(now())
+  endedAt   DateTime?
+
+  leaderboardWeekly LeaderboardWeekly[]
+
+  @@index([startedAt])
+  @@map("seasons")
+}
+
+model LeaderboardGlobal {
+  guestId   String   @id
+  bestScore Int
+  updatedAt DateTime @updatedAt
+
+  guest GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([bestScore(sort: Desc)])
+  @@map("leaderboard_global")
+}
+
+model LeaderboardWeekly {
+  guestId   String
+  seasonId  String
+  bestScore Int
+  updatedAt DateTime @updatedAt
+
+  guest  GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  season Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@id([guestId, seasonId])
+  @@index([bestScore(sort: Desc)])
+  @@index([seasonId])
+  @@map("leaderboard_weekly")
+}

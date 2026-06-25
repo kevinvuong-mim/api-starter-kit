@@ -1,247 +1,281 @@
-# Game API
+# Game Leaderboard API
 
-Backend API for game application built with NestJS, PostgreSQL, and Prisma ORM.
+Offline-first guest leaderboard backend for mobile games (Phaser + Capacitor). Built with NestJS, PostgreSQL, Prisma, and Redis.
 
-## 📋 Table of Contents
+## Features
 
-- [Tech Stack](#-tech-stack)
-- [Prerequisites](#-prerequisites)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-- [Running the App](#-running-the-app)
-- [Scripts](#-scripts)
-- [Project Structure](#-project-structure)
-- [Testing](#-testing)
-- [Deployment](#-deployment)
+- **Guest initialization** — anonymous players, no login required
+- **Offline game sync** — batch upload of game results with idempotent replay handling
+- **Global leaderboard** — all-time best scores
+- **Weekly leaderboard** — best scores for the active weekly season
+- **Anti-cheat** — score, duration, replay hash, seed, and duplicate detection with trust scoring
+- **Redis rankings** — sorted sets for fast top-100 and rank lookups
+- **Background jobs** — weekly season rotation and daily Redis rebuild
 
-## 🛠 Tech Stack
+## Tech Stack
 
-### Core
+- NestJS 11
+- PostgreSQL 16 + Prisma ORM
+- Redis 8 (sorted sets)
+- TypeScript (strict)
+- Swagger at `/api/docs`
 
-- **[NestJS](https://nestjs.com/)** - Framework Node.js progressive
-- **[TypeScript](https://www.typescriptlang.org/)** - Strongly typed programming language
-- **[Node.js](https://nodejs.org/)** - JavaScript runtime (v20+)
+## Prerequisites
 
-### Database
+- Node.js >= 20
+- Docker (PostgreSQL + Redis)
 
-- **[PostgreSQL](https://www.postgresql.org/)** - Relational database
-- **[Prisma](https://www.prisma.io/)** - Next-generation ORM
-
-### Security & Utilities
-
-- **[Helmet](https://helmetjs.github.io/)** - Security headers
-- **[bcrypt](https://github.com/kelektiv/node.bcrypt.js)** - Password hashing
-- **[class-validator](https://github.com/typestack/class-validator)** - Validation decorators
-- **[class-transformer](https://github.com/typestack/class-transformer)** - Object transformation
-
-## 📦 Prerequisites
-
-- **Node.js** >= 20.0.0
-- **Docker** for containerized database
-- **npm** or **yarn** or **pnpm**
-- **AWS Account** (for S3 storage)
-- **Google OAuth Credentials** (for Google login)
-- **SMTP Server** (for email service)
-
-## 🚀 Installation
-
-### 1. Clone repository
-
-```bash
-git clone https://github.com/kevinvuong-mim/game-api.git
-cd game-api
-```
-
-### 2. Install dependencies
+## Quick Start
 
 ```bash
 npm install
-# or
-yarn install
-# or
-pnpm install
-```
-
-### 3. Create .env file
-
-```bash
 cp .env.example .env
-```
-
-### 4. Setup database
-
-Start PostgreSQL database with Docker Compose:
-
-```bash
 docker-compose up -d
-```
-
-This will start:
-
-- Password: `1234abcd`
-- Username: `kwong2000`
-- Database name: `game`
-- PostgreSQL on port `5432`
-
-### 5. Run migrations
-
-```bash
 npm run prisma:migrate
-# or
-npx prisma migrate dev
-```
-
-### 6. Generate Prisma Client
-
-```bash
 npm run prisma:generate
-# or
-npx prisma generate
-```
-
-## ⚙️ Configuration
-
-Create a `.env` file in the root directory with the following environment variables:
-
-```env
-# Database
-DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
-
-# Redis
-REDIS_URL="redis://localhost:6379"
-
-# Server
-PORT=3000
-NODE_ENV="development"
-```
-
-📘 **For detailed instructions on obtaining environment variables**: See [Environment Variables Guide](./documents/setup/environment-variables.md)
-
-## 🏃 Running the App
-
-### Development mode
-
-```bash
 npm run start:dev
 ```
 
-Server will run at `http://localhost:3000`
+API: `http://localhost:3000`  
+Swagger: `http://localhost:3000/api/docs`
 
-### Production mode
+## Environment Variables
+
+```env
+DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
+REDIS_URL="redis://localhost:6379"
+PORT=3000
+NODE_ENV="development"
+
+# Anti-cheat tuning
+GAME_MAX_SCORE=1000000
+GAME_MIN_DURATION_SECONDS=5
+GAME_MAX_ACTIONS_PER_SECOND=10
+GAME_TRUST_PENALTY=20
+GAME_SHADOW_THRESHOLD=60
+GAME_BLOCKED_THRESHOLD=20
+```
+
+## Project Structure
+
+```
+src/
+├── config/                 # Game configuration
+├── modules/
+│   ├── guest/              # Guest player initialization
+│   ├── game-session/       # Offline result sync
+│   ├── leaderboard/        # Global & weekly rankings
+│   ├── anti-cheat/         # Cheat detection rules
+│   ├── season/             # Weekly seasons + cron jobs
+│   ├── redis/              # Redis sorted set service
+│   └── prisma/             # Database client
+├── common/                 # Filters, interceptors, interfaces
+└── main.ts
+prisma/
+├── schema.prisma
+└── migrations/
+```
+
+## API Reference
+
+All success responses are wrapped:
+
+```json
+{
+  "success": true,
+  "data": { ... },
+  "statusCode": 201,
+  "message": "Resource created successfully",
+  "path": "/guest/init",
+  "timestamp": "2026-06-25T12:00:00.000Z"
+}
+```
+
+### POST /guest/init
+
+Create a new guest player.
+
+**Response `data`:**
+
+```json
+{
+  "guestId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Example:**
 
 ```bash
-# Build
+curl -X POST http://localhost:3000/guest/init
+```
+
+---
+
+### POST /game/sync
+
+Batch sync offline game results. Idempotent by `replayHash`.
+
+**Request:**
+
+```json
+{
+  "guestId": "550e8400-e29b-41d4-a716-446655440000",
+  "results": [
+    {
+      "score": 1000,
+      "duration": 180,
+      "seed": 12345,
+      "moves": [{ "action": "tap", "x": 1, "y": 2 }],
+      "replayHash": "a3f2c1...",
+      "clientVersion": "1.0.0",
+      "playedAt": "2026-06-20T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Response `data`:**
+
+```json
+{
+  "accepted": 1,
+  "rejected": 0,
+  "bestScore": 1200
+}
+```
+
+**Replay hash (client-side):**
+
+```typescript
+import { createHash } from 'crypto';
+
+function computeReplayHash(result: {
+  seed: number;
+  score: number;
+  duration: number;
+  moves: unknown[];
+}): string {
+  const payload = `${result.seed}:${result.score}:${result.duration}:${JSON.stringify(result.moves)}`;
+  return createHash('sha256').update(payload).digest('hex');
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:3000/game/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "guestId": "YOUR_GUEST_ID",
+    "results": [{
+      "score": 1000,
+      "duration": 60,
+      "seed": 42,
+      "moves": [{"action": "tap", "x": 1, "y": 2}],
+      "replayHash": "COMPUTED_HASH"
+    }]
+  }'
+```
+
+---
+
+### GET /leaderboard/global
+
+**Query:** `page` (default 1), `limit` (default 20, max 100), `guestId` (optional, for `myRank`)
+
+**Response `data`:**
+
+```json
+{
+  "top": [
+    { "guestId": "...", "score": 5000, "rank": 1 },
+    { "guestId": "...", "score": 4800, "rank": 2 }
+  ],
+  "myRank": 123
+}
+```
+
+**Example:**
+
+```bash
+curl "http://localhost:3000/leaderboard/global?guestId=YOUR_GUEST_ID&page=1&limit=20"
+```
+
+---
+
+### GET /leaderboard/weekly
+
+Same query params and response shape as global, scoped to the active weekly season.
+
+```bash
+curl "http://localhost:3000/leaderboard/weekly?guestId=YOUR_GUEST_ID&page=1&limit=20"
+```
+
+## Anti-Cheat
+
+| Rule | Action |
+|------|--------|
+| Score > max or < 0 | Reject |
+| Duration below minimum | Reject |
+| Actions/second too high | Reject |
+| Invalid replay hash | Reject |
+| Invalid seed | Reject |
+| Duplicate replay (other player) | Reject |
+
+**Trust score:** starts at 100. Each violation: **-20**.
+
+| Trust Score | Status | Effect |
+|-------------|--------|--------|
+| 60–100 | NORMAL | Full leaderboard access |
+| 20–59 | SHADOW | Scores stored, hidden from public boards |
+| 0–19 | BLOCKED | Cannot sync |
+
+## Background Jobs
+
+| Schedule | Job |
+|----------|-----|
+| Monday 00:00 | Close weekly season, snapshot, open new season |
+| Daily 03:00 | Rebuild Redis leaderboards from PostgreSQL |
+
+## Redis Keys
+
+| Key | Purpose |
+|-----|---------|
+| `lb:global` | Global all-time rankings |
+| `lb:weekly:{seasonId}` | Weekly season rankings |
+
+## Testing
+
+```bash
+npm run test        # Unit tests
+npm run test:e2e    # End-to-end tests
+npm run test:cov    # Coverage
+```
+
+## Scripts
+
+```bash
+npm run start:dev         # Development server
+npm run build             # Production build
+npm run start:prod        # Run production build
+npm run prisma:migrate    # Run migrations
+npm run prisma:generate   # Generate Prisma client
+```
+
+## Database Models
+
+- **GuestPlayer** — anonymous player with trust score and status
+- **GameResult** — synced match with replay hash (unique, idempotent)
+- **Season** — weekly competitive periods
+- **LeaderboardGlobal** — all-time best score per guest
+- **LeaderboardWeekly** — best score per guest per season
+
+## Deployment
+
+```bash
 npm run build
-
-# Start
-npm run start:prod
-```
-
-### Debug mode
-
-```bash
-npm run start:debug
-```
-
-## 📜 Scripts
-
-```bash
-# Development
-npm run start          # Start the application
-npm run start:dev      # Start with watch mode
-npm run start:debug    # Start with debug mode
-
-# Build
-npm run build          # Build for production
-
-# Production
-npm run start:prod     # Run production build
-
-# Code Quality
-npm run format         # Format code with Prettier
-npm run lint           # Lint code with ESLint
-
-# Testing
-npm run test           # Run unit tests
-npm run test:watch     # Run tests in watch mode
-npm run test:cov       # Run tests with coverage
-npm run test:e2e       # Run end-to-end tests
-
-# Database
-npm run prisma:generate  # Generate Prisma Client
-npm run prisma:migrate   # Run migrations
-npx prisma studio        # Open Prisma Studio (database GUI)
-
-# Docker
-docker-compose up -d     # Start database in background
-docker-compose down      # Stop database
-```
-
-## 📁 Project Structure
-
-```
-game-api/
-├── documents/             # Project documentation
-│   └── setup/             # Setup guides
-├── prisma/
-│   ├── schema.prisma      # Database schema
-│   └── migrations/        # Database migrations
-├── src/
-│   ├── prisma/            # Prisma service
-│   ├── common/            # Shared utilities
-│   │   ├── decorators/    # Custom decorators
-│   │   ├── filters/       # Exception filters
-│   │   ├── interceptors/  # Response interceptors
-│   │   ├── interfaces/    # Shared interfaces
-│   │   └──  utils/         # Utility functions
-│   ├── app.module.ts      # Root module
-│   └── main.ts            # Application entry point
-├── test/                  # Test files
-├── .env                   # Environment variables
-├── .env.example           # Environment template
-└── package.json           # Dependencies
-```
-
-## 🧪 Testing
-
-```bash
-# Unit tests
-npm run test
-
-# Watch mode
-npm run test:watch
-
-# Test coverage
-npm run test:cov
-
-# E2E tests
-npm run test:e2e
-```
-
-## 🚀 Deployment
-
-### 1. Build the application
-
-```bash
-npm run build
-```
-
-### 2. Set environment variables
-
-Ensure all production environment variables are properly configured:
-
-- `NODE_ENV=production`
-- Production database URL
-- Production Redis URL
-
-### 3. Run migrations
-
-```bash
 npx prisma migrate deploy
-```
-
-### 4. Start application
-
-```bash
 npm run start:prod
 ```
+
+Set `NODE_ENV=production` and configure production `DATABASE_URL` and `REDIS_URL`.
