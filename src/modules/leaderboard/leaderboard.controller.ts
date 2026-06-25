@@ -16,11 +16,4 @@ export class LeaderboardController {
   getGlobal(@Query() query: LeaderboardQueryDto): Promise<LeaderboardResponseDto> {
     return this.leaderboardService.getGlobalLeaderboard(query);
   }
-
-  @Get('weekly')
-  @ApiOperation({ summary: 'Get active weekly season leaderboard' })
-  @ApiResponse({ status: 200, type: LeaderboardResponseDto })
-  getWeekly(@Query() query: LeaderboardQueryDto): Promise<LeaderboardResponseDto> {
-    return this.leaderboardService.getWeeklyLeaderboard(query);
-  }
 }

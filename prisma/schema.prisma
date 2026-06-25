@@ -14,21 +14,19 @@ model Game {
   config    Json?
   createdAt DateTime @default(now())
 
-  gameResults       GameResult[]
-  seasons           Season[]
-  leaderboardGlobal LeaderboardGlobal[]
-  leaderboardWeekly LeaderboardWeekly[]
+  gameResults GameResult[]
+  leaderboard Leaderboard[]
 
   @@map("games")
 }
 
 model GuestPlayer {
   id        String   @id @default(uuid())
+  name      String?
   createdAt DateTime @default(now())
 
-  gameResults       GameResult[]
-  leaderboardGlobal LeaderboardGlobal[]
-  leaderboardWeekly LeaderboardWeekly[]
+  gameResults GameResult[]
+  leaderboard Leaderboard[]
 
   @@map("guest_players")
 }
@@ -52,21 +50,7 @@ model GameResult {
   @@map("game_results")
 }
 
-model Season {
-  id      String    @id @default(uuid())
-  gameId  String
-  startAt DateTime  @default(now())
-  endAt   DateTime?
-
-  game              Game                @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  leaderboardWeekly LeaderboardWeekly[]
-
-  @@index([gameId, startAt])
-  @@index([gameId, endAt])
-  @@map("seasons")
-}
-
-model LeaderboardGlobal {
+model Leaderboard {
   gameId    String
   guestId   String
   bestScore Int
@@ -77,21 +61,5 @@ model LeaderboardGlobal {
 
   @@id([gameId, guestId])
   @@index([gameId, bestScore(sort: Desc)])
-  @@map("leaderboard_global")
-}
-
-model LeaderboardWeekly {
-  gameId    String
-  seasonId  String
-  guestId   String
-  bestScore Int
-  updatedAt DateTime @updatedAt
-
-  game   Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  season Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  guest  GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
-
-  @@id([gameId, seasonId, guestId])
-  @@index([gameId, seasonId, bestScore(sort: Desc)])
-  @@map("leaderboard_weekly")
+  @@map("leaderboard")
 }

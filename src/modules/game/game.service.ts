@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 
 import { GuestService } from '@/modules/guest/guest.service';
 import { ReplayService } from '@/modules/replay/replay.service';
-import { SeasonService } from '@/modules/season/season.service';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameRepository } from '@/modules/game/game.repository';
@@ -16,7 +15,6 @@ export class GameService {
     private readonly guestService: GuestService,
     private readonly replayService: ReplayService,
     private readonly gameRegistryService: GameRegistryService,
-    private readonly seasonService: SeasonService,
     private readonly redisRankingService: RedisRankingService,
     private readonly gameRepository: GameRepository,
     private readonly prisma: PrismaService,
@@ -65,55 +63,19 @@ export class GameService {
     guestId: string,
     score: number,
   ): Promise<void> {
-    const activeSeason = await this.seasonService.getActiveWeeklySeason(gameId);
-
     await this.prisma.$transaction(async (tx) => {
-      const globalEntry = await tx.leaderboardGlobal.findUnique({
+      const currentEntry = await tx.leaderboard.findUnique({
         where: { gameId_guestId: { gameId, guestId } },
       });
 
-      if (!globalEntry || score > globalEntry.bestScore) {
-        await tx.leaderboardGlobal.upsert({
+      if (!currentEntry || score > currentEntry.bestScore) {
+        await tx.leaderboard.upsert({
           where: { gameId_guestId: { gameId, guestId } },
           create: { gameId, guestId, bestScore: score },
           update: { bestScore: score },
         });
         await this.redisRankingService.updateScore(
           this.redisRankingService.getGlobalKey(gameId),
-          guestId,
-          score,
-        );
-      }
-
-      const weeklyEntry = await tx.leaderboardWeekly.findUnique({
-        where: {
-          gameId_seasonId_guestId: {
-            gameId,
-            seasonId: activeSeason.id,
-            guestId,
-          },
-        },
-      });
-
-      if (!weeklyEntry || score > weeklyEntry.bestScore) {
-        await tx.leaderboardWeekly.upsert({
-          where: {
-            gameId_seasonId_guestId: {
-              gameId,
-              seasonId: activeSeason.id,
-              guestId,
-            },
-          },
-          create: {
-            gameId,
-            seasonId: activeSeason.id,
-            guestId,
-            bestScore: score,
-          },
-          update: { bestScore: score },
-        });
-        await this.redisRankingService.updateScore(
-          this.redisRankingService.getWeeklyKey(gameId, activeSeason.id),
           guestId,
           score,
         );

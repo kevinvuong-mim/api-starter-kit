@@ -7,7 +7,6 @@ import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { RedisModule } from '@/modules/redis/redis.module';
 import { GuestModule } from '@/modules/guest/guest.module';
 import { ReplayModule } from '@/modules/replay/replay.module';
-import { SeasonModule } from '@/modules/season/season.module';
 import { GameModule } from '@/modules/game/game.module';
 import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
 import { HttpExceptionFilter } from '@/common/filters';
@@ -36,7 +35,6 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     RedisModule,
     GuestModule,
     ReplayModule,
-    SeasonModule,
     GameModule,
     LeaderboardModule,
     ThrottlerModule.forRoot([

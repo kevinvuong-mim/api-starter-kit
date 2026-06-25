@@ -2,7 +2,6 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
 
 export const REDIS_KEYS = {
   global: (gameId: string) => `lb:global:${gameId}`,
-  weekly: (gameId: string, seasonId: string) => `lb:weekly:${gameId}:${seasonId}`,
 } as const;
 
 export interface LeaderboardEntry {

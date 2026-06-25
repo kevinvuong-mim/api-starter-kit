@@ -14,4 +14,8 @@ export class GuestRepository {
   findById(id: string): Promise<GuestPlayer | null> {
     return this.prisma.guestPlayer.findUnique({ where: { id } });
   }
+
+  updateName(id: string, name: string): Promise<GuestPlayer> {
+    return this.prisma.guestPlayer.update({ where: { id }, data: { name } });
+  }
 }

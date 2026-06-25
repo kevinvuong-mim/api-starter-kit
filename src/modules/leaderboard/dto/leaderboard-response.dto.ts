@@ -4,6 +4,9 @@ export class LeaderboardEntryDto {
   @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   guestId!: string;
 
+  @ApiPropertyOptional({ example: 'PlayerOne', nullable: true })
+  name!: string | null;
+
   @ApiProperty({ example: 1500 })
   score!: number;
 

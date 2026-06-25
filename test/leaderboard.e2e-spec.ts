@@ -86,14 +86,4 @@ describe('Leaderboard API (e2e)', () => {
     expect(Array.isArray(response.body.data.top)).toBe(true);
     expect(response.body.data).toHaveProperty('myRank');
   });
-
-  it('GET /leaderboard/weekly returns weekly standings', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/leaderboard/weekly')
-      .query({ gameId: GAME_ID, guestId, limit: 10 })
-      .expect(200);
-
-    expect(response.body.data).toHaveProperty('top');
-    expect(Array.isArray(response.body.data.top)).toBe(true);
-  });
 });

@@ -34,7 +34,7 @@ export class GameRepository {
   }
 
   getBestScoreForGuest(gameId: string, guestId: string): Promise<number> {
-    return this.prisma.leaderboardGlobal
+    return this.prisma.leaderboard
       .findUnique({
         where: { gameId_guestId: { gameId, guestId } },
         select: { bestScore: true },

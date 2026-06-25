@@ -82,32 +82,8 @@ export class RedisRankingService implements OnModuleDestroy {
     await this.redis.zadd(key, ...args);
   }
 
-  async rebuildWeekly(
-    gameId: string,
-    seasonId: string,
-    entries: Array<{ guestId: string; bestScore: number }>,
-  ): Promise<void> {
-    const key = REDIS_KEYS.weekly(gameId, seasonId);
-    await this.redis.del(key);
-
-    if (entries.length === 0) {
-      return;
-    }
-
-    const args: Array<string | number> = [];
-    for (const entry of entries) {
-      args.push(entry.bestScore, entry.guestId);
-    }
-
-    await this.redis.zadd(key, ...args);
-  }
-
   getGlobalKey(gameId: string): string {
     return REDIS_KEYS.global(gameId);
-  }
-
-  getWeeklyKey(gameId: string, seasonId: string): string {
-    return REDIS_KEYS.weekly(gameId, seasonId);
   }
 }
 

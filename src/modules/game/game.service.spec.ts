@@ -4,7 +4,6 @@ import { GameService } from '@/modules/game/game.service';
 import { GuestService } from '@/modules/guest/guest.service';
 import { ReplayService } from '@/modules/replay/replay.service';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
-import { SeasonService } from '@/modules/season/season.service';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { GameRepository } from '@/modules/game/game.repository';
 import { PrismaService } from '@/modules/prisma/prisma.service';
@@ -24,14 +23,9 @@ describe('GameService', () => {
     assertActiveGame: jest.fn(),
   };
 
-  const mockSeasonService = {
-    getActiveWeeklySeason: jest.fn(),
-  };
-
   const mockRedisRankingService = {
     updateScore: jest.fn(),
     getGlobalKey: jest.fn().mockReturnValue('lb:global:puzzle-quest'),
-    getWeeklyKey: jest.fn().mockReturnValue('lb:weekly:puzzle-quest:season-1'),
   };
 
   const mockRepository = {
@@ -42,11 +36,7 @@ describe('GameService', () => {
 
   const mockPrisma = {
     $transaction: jest.fn((callback) => callback(mockPrisma)),
-    leaderboardGlobal: {
-      findUnique: jest.fn(),
-      upsert: jest.fn(),
-    },
-    leaderboardWeekly: {
+    leaderboard: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
     },
@@ -59,7 +49,6 @@ describe('GameService', () => {
         { provide: GuestService, useValue: mockGuestService },
         { provide: ReplayService, useValue: mockReplayService },
         { provide: GameRegistryService, useValue: mockGameRegistryService },
-        { provide: SeasonService, useValue: mockSeasonService },
         { provide: RedisRankingService, useValue: mockRedisRankingService },
         { provide: GameRepository, useValue: mockRepository },
         { provide: PrismaService, useValue: mockPrisma },
@@ -72,10 +61,8 @@ describe('GameService', () => {
 
     mockGameRegistryService.assertActiveGame.mockResolvedValue({ id: 'puzzle-quest' });
     mockGuestService.getGuestOrThrow.mockResolvedValue({ id: 'guest-1' });
-    mockSeasonService.getActiveWeeklySeason.mockResolvedValue({ id: 'season-1' });
     mockRepository.getBestScoreForGuest.mockResolvedValue(1000);
-    mockPrisma.leaderboardGlobal.findUnique.mockResolvedValue(null);
-    mockPrisma.leaderboardWeekly.findUnique.mockResolvedValue(null);
+    mockPrisma.leaderboard.findUnique.mockResolvedValue(null);
   });
 
   it('accepts valid results and updates leaderboards', async () => {
