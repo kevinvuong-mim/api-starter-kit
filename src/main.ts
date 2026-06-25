@@ -3,8 +3,6 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { NestFactory } from '@nestjs/core';
 import { Logger, HttpException, ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-
 import { AppModule } from '@/app.module';
 import { HttpExceptionFilter } from '@/common/filters';
 import { ResponseInterceptor } from '@/common/interceptors';
@@ -84,18 +82,6 @@ async function bootstrap() {
 
   // Graceful shutdown
   app.enableShutdownHooks();
-
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Game Leaderboard API')
-    .setDescription('Offline-first guest leaderboard API for mobile games')
-    .setVersion('1.0')
-    .addTag('guest')
-    .addTag('game')
-    .addTag('leaderboard')
-    .build();
-
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT ?? 3000;
 

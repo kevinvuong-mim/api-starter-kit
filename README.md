@@ -18,7 +18,6 @@ Scalable, multi-game guest leaderboard backend for mobile games. Built with Nest
 - PostgreSQL 16 + Prisma ORM
 - Redis 8 (sorted sets)
 - TypeScript (strict)
-- Swagger at `/api/docs`
 
 ## Prerequisites
 
@@ -36,8 +35,7 @@ npm run prisma:generate
 npm run start:dev
 ```
 
-API: `http://localhost:3000`  
-Swagger: `http://localhost:3000/api/docs`
+API: `http://localhost:3000`
 
 ## Environment Variables
 
