@@ -46,7 +46,6 @@ DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
 REDIS_URL="redis://localhost:6379"
 PORT=3000
 NODE_ENV="development"
-GAME_LEADERBOARD_TOP_LIMIT=100
 ```
 
 ## Project Structure
@@ -59,7 +58,6 @@ src/
 │   ├── game/               # Game sync + registry
 │   ├── replay/             # Replay hash validation (anti-cheat)
 │   ├── leaderboard/        # Global & weekly rankings
-│   ├── season/             # Per-game weekly seasons + cron jobs
 │   ├── redis/              # Redis sorted set service
 │   └── prisma/             # Database client
 ├── common/                 # Filters, interceptors, interfaces
@@ -74,8 +72,8 @@ prisma/
 Insert a row into the `games` table — no code changes required:
 
 ```sql
-INSERT INTO games (id, name, "isActive", config)
-VALUES ('my-new-game', 'My New Game', true, '{"leaderboardTopLimit": 100}');
+INSERT INTO games (id, name, "isActive")
+VALUES ('my-new-game', 'My New Game', true);
 ```
 
 The core sync, leaderboard, and season logic automatically applies to the new `gameId`.

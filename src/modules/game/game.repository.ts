@@ -16,11 +16,7 @@ export class GameRepository {
     });
   }
 
-  createResult(
-    gameId: string,
-    guestId: string,
-    input: GameResultDto,
-  ): Promise<GameResult> {
+  createResult(gameId: string, guestId: string, input: GameResultDto): Promise<GameResult> {
     return this.prisma.gameResult.create({
       data: {
         gameId,

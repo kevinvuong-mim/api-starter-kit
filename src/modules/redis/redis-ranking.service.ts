@@ -2,26 +2,16 @@ import Redis from 'ioredis';
 import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import {
-  REDIS_CLIENT,
-  REDIS_KEYS,
-  LeaderboardEntry,
-} from '@/modules/redis/redis.constants';
-import { GAME_CONFIG_KEY, GameConfig } from '@/config/game.config';
+import { REDIS_CLIENT, REDIS_KEYS, LeaderboardEntry } from '@/modules/redis/redis.constants';
+
+const LEADERBOARD_TOP_LIMIT = 100;
 
 @Injectable()
 export class RedisRankingService implements OnModuleDestroy {
-  constructor(
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   async onModuleDestroy() {
     await this.redis.quit();
-  }
-
-  private get topLimit(): number {
-    return this.configService.get<GameConfig>(GAME_CONFIG_KEY)!.leaderboardTopLimit;
   }
 
   async updateScore(key: string, guestId: string, score: number): Promise<void> {
@@ -33,8 +23,12 @@ export class RedisRankingService implements OnModuleDestroy {
     await this.redis.zadd(key, score, guestId);
   }
 
-  async getTop(key: string, limit = this.topLimit, offset = 0): Promise<LeaderboardEntry[]> {
-    const cappedLimit = Math.min(limit, this.topLimit);
+  async getTop(
+    key: string,
+    limit = LEADERBOARD_TOP_LIMIT,
+    offset = 0,
+  ): Promise<LeaderboardEntry[]> {
+    const cappedLimit = Math.min(limit, LEADERBOARD_TOP_LIMIT);
     const results = await this.redis.zrevrange(key, offset, offset + cappedLimit - 1, 'WITHSCORES');
 
     const entries: LeaderboardEntry[] = [];
@@ -49,7 +43,10 @@ export class RedisRankingService implements OnModuleDestroy {
     return entries;
   }
 
-  async getPlayerRank(key: string, guestId: string): Promise<{ rank: number; score: number } | null> {
+  async getPlayerRank(
+    key: string,
+    guestId: string,
+  ): Promise<{ rank: number; score: number } | null> {
     const score = await this.redis.zscore(key, guestId);
     if (score === null) {
       return null;

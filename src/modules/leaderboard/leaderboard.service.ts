@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
-import { GAME_CONFIG_KEY, GameConfig } from '@/config/game.config';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
@@ -13,18 +11,13 @@ export class LeaderboardService {
   constructor(
     private readonly redisRankingService: RedisRankingService,
     private readonly gameRegistryService: GameRegistryService,
-    private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {}
-
-  private get config(): GameConfig {
-    return this.configService.get<GameConfig>(GAME_CONFIG_KEY)!;
-  }
 
   async getGlobalLeaderboard(query: LeaderboardQueryDto): Promise<LeaderboardResponseDto> {
     await this.gameRegistryService.assertActiveGame(query.gameId);
 
-    const limit = Math.min(query.limit ?? this.config.leaderboardTopLimit, this.config.leaderboardTopLimit);
+    const limit = Math.min(query.limit ?? 100, 100);
     const key = this.redisRankingService.getGlobalKey(query.gameId);
     const top = await this.redisRankingService.getTop(key, limit, 0);
     const names = await this.resolveGuestNames(top.map((entry) => entry.guestId));

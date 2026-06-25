@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 
 import { AppService } from '@/app.service';
 import { AppController } from '@/app.controller';
-import { AppConfigModule } from '@/config/config.module';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { RedisModule } from '@/modules/redis/redis.module';
 import { GuestModule } from '@/modules/guest/guest.module';
@@ -29,7 +28,6 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     },
   ],
   imports: [
-    AppConfigModule,
     ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,

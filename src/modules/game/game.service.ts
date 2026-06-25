@@ -58,11 +58,7 @@ export class GameService {
     return { accepted, rejected, bestScore };
   }
 
-  private async updateLeaderboards(
-    gameId: string,
-    guestId: string,
-    score: number,
-  ): Promise<void> {
+  private async updateLeaderboards(gameId: string, guestId: string, score: number): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const currentEntry = await tx.leaderboard.findUnique({
         where: { gameId_guestId: { gameId, guestId } },
