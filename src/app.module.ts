@@ -1,7 +1,4 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_FILTER } from '@nestjs/core';
-import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AppService } from '@/app.service';
 import { AppController } from '@/app.controller';
@@ -9,11 +6,15 @@ import { AppConfigModule } from '@/config/config.module';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { RedisModule } from '@/modules/redis/redis.module';
 import { GuestModule } from '@/modules/guest/guest.module';
-import { AntiCheatModule } from '@/modules/anti-cheat/anti-cheat.module';
+import { ReplayModule } from '@/modules/replay/replay.module';
 import { SeasonModule } from '@/modules/season/season.module';
-import { GameSessionModule } from '@/modules/game-session/game-session.module';
+import { GameModule } from '@/modules/game/game.module';
 import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
 import { HttpExceptionFilter } from '@/common/filters';
+
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   controllers: [AppController],
@@ -34,9 +35,9 @@ import { HttpExceptionFilter } from '@/common/filters';
     PrismaModule,
     RedisModule,
     GuestModule,
-    AntiCheatModule,
+    ReplayModule,
     SeasonModule,
-    GameSessionModule,
+    GameModule,
     LeaderboardModule,
     ThrottlerModule.forRoot([
       {

@@ -9,16 +9,10 @@ describe('RedisRankingService', () => {
   let redis: jest.Mocked<Redis>;
 
   const gameConfig = {
-    maxScore: 1_000_000,
-    minDurationSeconds: 5,
-    maxActionsPerSecond: 10,
-    trustPenalty: 20,
-    shadowThreshold: 60,
-    blockedThreshold: 20,
-    maxSeed: 2_147_483_647,
     leaderboardTopLimit: 100,
-    nearbyRankRange: 2,
   };
+
+  const gameId = 'puzzle-quest';
 
   beforeEach(() => {
     redis = {
@@ -36,21 +30,24 @@ describe('RedisRankingService', () => {
   });
 
   it('updates score when new score is higher', async () => {
+    const key = REDIS_KEYS.global(gameId);
     redis.zscore.mockResolvedValue('100');
-    await service.updateScore(REDIS_KEYS.global, 'guest-1', 200);
-    expect(redis.zadd).toHaveBeenCalledWith(REDIS_KEYS.global, 200, 'guest-1');
+    await service.updateScore(key, 'guest-1', 200);
+    expect(redis.zadd).toHaveBeenCalledWith(key, 200, 'guest-1');
   });
 
   it('skips update when score is not higher', async () => {
+    const key = REDIS_KEYS.global(gameId);
     redis.zscore.mockResolvedValue('500');
-    await service.updateScore(REDIS_KEYS.global, 'guest-1', 200);
+    await service.updateScore(key, 'guest-1', 200);
     expect(redis.zadd).not.toHaveBeenCalled();
   });
 
   it('returns top entries with ranks', async () => {
+    const key = REDIS_KEYS.global(gameId);
     redis.zrevrange.mockResolvedValue(['guest-1', '1000', 'guest-2', '900']);
 
-    const top = await service.getTop(REDIS_KEYS.global, 2, 0);
+    const top = await service.getTop(key, 2, 0);
     expect(top).toEqual([
       { guestId: 'guest-1', score: 1000, rank: 1 },
       { guestId: 'guest-2', score: 900, rank: 2 },
@@ -58,10 +55,11 @@ describe('RedisRankingService', () => {
   });
 
   it('returns player rank', async () => {
+    const key = REDIS_KEYS.global(gameId);
     redis.zscore.mockResolvedValue('750');
     redis.zrevrank.mockResolvedValue(4);
 
-    const rank = await service.getPlayerRank(REDIS_KEYS.global, 'guest-1');
+    const rank = await service.getPlayerRank(key, 'guest-1');
     expect(rank).toEqual({ rank: 5, score: 750 });
   });
 });

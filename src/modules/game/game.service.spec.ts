@@ -1,40 +1,27 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 
-import { GameSessionService } from '@/modules/game-session/game-session.service';
+import { GameService } from '@/modules/game/game.service';
 import { GuestService } from '@/modules/guest/guest.service';
-import { AntiCheatService } from '@/modules/anti-cheat/anti-cheat.service';
+import { ReplayService } from '@/modules/replay/replay.service';
+import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { SeasonService } from '@/modules/season/season.service';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
-import { GameSessionRepository } from '@/modules/game-session/game-session.repository';
+import { GameRepository } from '@/modules/game/game.repository';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { GAME_CONFIG_KEY } from '@/config/game.config';
 
-describe('GameSessionService', () => {
-  let service: GameSessionService;
-
-  const gameConfig = {
-    maxScore: 1_000_000,
-    minDurationSeconds: 5,
-    maxActionsPerSecond: 10,
-    trustPenalty: 20,
-    shadowThreshold: 60,
-    blockedThreshold: 20,
-    maxSeed: 2_147_483_647,
-    leaderboardTopLimit: 100,
-    nearbyRankRange: 2,
-  };
+describe('GameService', () => {
+  let service: GameService;
 
   const mockGuestService = {
-    assertCanSync: jest.fn(),
     getGuestOrThrow: jest.fn(),
-    touchGuest: jest.fn(),
-    penalizeGuest: jest.fn(),
   };
 
-  const mockAntiCheatService = {
+  const mockReplayService = {
     validate: jest.fn(),
-    computeReplayHash: jest.fn(),
+  };
+
+  const mockGameRegistryService = {
+    assertActiveGame: jest.fn(),
   };
 
   const mockSeasonService = {
@@ -43,8 +30,8 @@ describe('GameSessionService', () => {
 
   const mockRedisRankingService = {
     updateScore: jest.fn(),
-    getGlobalKey: jest.fn().mockReturnValue('lb:global'),
-    getWeeklyKey: jest.fn().mockReturnValue('lb:weekly:season-1'),
+    getGlobalKey: jest.fn().mockReturnValue('lb:global:puzzle-quest'),
+    getWeeklyKey: jest.fn().mockReturnValue('lb:weekly:puzzle-quest:season-1'),
   };
 
   const mockRepository = {
@@ -68,28 +55,23 @@ describe('GameSessionService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        GameSessionService,
+        GameService,
         { provide: GuestService, useValue: mockGuestService },
-        { provide: AntiCheatService, useValue: mockAntiCheatService },
+        { provide: ReplayService, useValue: mockReplayService },
+        { provide: GameRegistryService, useValue: mockGameRegistryService },
         { provide: SeasonService, useValue: mockSeasonService },
         { provide: RedisRankingService, useValue: mockRedisRankingService },
-        { provide: GameSessionRepository, useValue: mockRepository },
+        { provide: GameRepository, useValue: mockRepository },
         { provide: PrismaService, useValue: mockPrisma },
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) => (key === GAME_CONFIG_KEY ? gameConfig : undefined),
-          },
-        },
       ],
     }).compile();
 
-    service = module.get(GameSessionService);
+    service = module.get(GameService);
 
     jest.clearAllMocks();
 
-    mockGuestService.assertCanSync.mockResolvedValue({ id: 'guest-1', status: 'NORMAL' });
-    mockGuestService.getGuestOrThrow.mockResolvedValue({ id: 'guest-1', status: 'NORMAL' });
+    mockGameRegistryService.assertActiveGame.mockResolvedValue({ id: 'puzzle-quest' });
+    mockGuestService.getGuestOrThrow.mockResolvedValue({ id: 'guest-1' });
     mockSeasonService.getActiveWeeklySeason.mockResolvedValue({ id: 'season-1' });
     mockRepository.getBestScoreForGuest.mockResolvedValue(1000);
     mockPrisma.leaderboardGlobal.findUnique.mockResolvedValue(null);
@@ -98,17 +80,15 @@ describe('GameSessionService', () => {
 
   it('accepts valid results and updates leaderboards', async () => {
     mockRepository.findByReplayHash.mockResolvedValue(null);
-    mockAntiCheatService.validate.mockResolvedValue({ valid: true });
+    mockReplayService.validate.mockResolvedValue({ valid: true });
 
     const result = {
       score: 1000,
       duration: 60,
-      seed: 1,
-      moves: [],
-      replayHash: 'hash-1',
+      replayHash: 'a'.repeat(64),
     };
 
-    const response = await service.syncResults('guest-1', [result]);
+    const response = await service.syncResults('puzzle-quest', 'guest-1', [result]);
 
     expect(response.accepted).toBe(1);
     expect(response.rejected).toBe(0);
@@ -123,13 +103,11 @@ describe('GameSessionService', () => {
       guestId: 'guest-1',
     });
 
-    const response = await service.syncResults('guest-1', [
+    const response = await service.syncResults('puzzle-quest', 'guest-1', [
       {
         score: 1000,
         duration: 60,
-        seed: 1,
-        moves: [],
-        replayHash: 'hash-1',
+        replayHash: 'a'.repeat(64),
       },
     ]);
 

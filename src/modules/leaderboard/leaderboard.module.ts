@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
 
-import { GuestModule } from '@/modules/guest/guest.module';
+import { GameRegistryModule } from '@/modules/game/game-registry.module';
 import { SeasonModule } from '@/modules/season/season.module';
 import { RedisModule } from '@/modules/redis/redis.module';
 import { LeaderboardController } from '@/modules/leaderboard/leaderboard.controller';
 import { LeaderboardService } from '@/modules/leaderboard/leaderboard.service';
 
 @Module({
-  imports: [RedisModule, SeasonModule, GuestModule],
+  imports: [RedisModule, SeasonModule, GameRegistryModule],
   controllers: [LeaderboardController],
   providers: [LeaderboardService],
 })

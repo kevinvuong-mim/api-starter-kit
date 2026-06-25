@@ -6,7 +6,6 @@ import {
   REDIS_CLIENT,
   REDIS_KEYS,
   LeaderboardEntry,
-  NearbyRanksResult,
 } from '@/modules/redis/redis.constants';
 import { GAME_CONFIG_KEY, GameConfig } from '@/config/game.config';
 
@@ -23,10 +22,6 @@ export class RedisRankingService implements OnModuleDestroy {
 
   private get topLimit(): number {
     return this.configService.get<GameConfig>(GAME_CONFIG_KEY)!.leaderboardTopLimit;
-  }
-
-  private get nearbyRange(): number {
-    return this.configService.get<GameConfig>(GAME_CONFIG_KEY)!.nearbyRankRange;
   }
 
   async updateScore(key: string, guestId: string, score: number): Promise<void> {
@@ -68,25 +63,11 @@ export class RedisRankingService implements OnModuleDestroy {
     return { rank: rank + 1, score: Number(score) };
   }
 
-  async getNearbyRanks(key: string, guestId: string): Promise<NearbyRanksResult | null> {
-    const playerRank = await this.getPlayerRank(key, guestId);
-    if (!playerRank) {
-      return null;
-    }
-
-    const start = Math.max(0, playerRank.rank - 1 - this.nearbyRange);
-    const end = playerRank.rank - 1 + this.nearbyRange;
-    const nearby = await this.getTop(key, end - start + 1, start);
-
-    return {
-      rank: playerRank.rank,
-      score: playerRank.score,
-      nearby,
-    };
-  }
-
-  async rebuildGlobal(entries: Array<{ guestId: string; bestScore: number }>): Promise<void> {
-    const key = REDIS_KEYS.global;
+  async rebuildGlobal(
+    gameId: string,
+    entries: Array<{ guestId: string; bestScore: number }>,
+  ): Promise<void> {
+    const key = REDIS_KEYS.global(gameId);
     await this.redis.del(key);
 
     if (entries.length === 0) {
@@ -102,10 +83,11 @@ export class RedisRankingService implements OnModuleDestroy {
   }
 
   async rebuildWeekly(
+    gameId: string,
     seasonId: string,
     entries: Array<{ guestId: string; bestScore: number }>,
   ): Promise<void> {
-    const key = REDIS_KEYS.weekly(seasonId);
+    const key = REDIS_KEYS.weekly(gameId, seasonId);
     await this.redis.del(key);
 
     if (entries.length === 0) {
@@ -120,12 +102,12 @@ export class RedisRankingService implements OnModuleDestroy {
     await this.redis.zadd(key, ...args);
   }
 
-  getGlobalKey(): string {
-    return REDIS_KEYS.global;
+  getGlobalKey(gameId: string): string {
+    return REDIS_KEYS.global(gameId);
   }
 
-  getWeeklyKey(seasonId: string): string {
-    return REDIS_KEYS.weekly(seasonId);
+  getWeeklyKey(gameId: string, seasonId: string): string {
+    return REDIS_KEYS.weekly(gameId, seasonId);
   }
 }
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Season, SeasonType } from '@prisma/client';
+import { Season } from '@prisma/client';
 
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
@@ -7,37 +7,47 @@ import { PrismaService } from '@/modules/prisma/prisma.service';
 export class SeasonRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findActiveWeekly(): Promise<Season | null> {
+  findActiveWeekly(gameId: string): Promise<Season | null> {
     return this.prisma.season.findFirst({
-      where: { type: SeasonType.WEEKLY, endedAt: null },
-      orderBy: { startedAt: 'desc' },
+      where: { gameId, endAt: null },
+      orderBy: { startAt: 'desc' },
     });
   }
 
-  createWeekly(startedAt = new Date()): Promise<Season> {
+  createWeekly(gameId: string, startAt = new Date()): Promise<Season> {
     return this.prisma.season.create({
       data: {
-        type: SeasonType.WEEKLY,
-        startedAt,
+        gameId,
+        startAt,
       },
     });
   }
 
-  closeSeason(seasonId: string, endedAt = new Date()): Promise<Season> {
+  closeSeason(seasonId: string, endAt = new Date()): Promise<Season> {
     return this.prisma.season.update({
       where: { id: seasonId },
-      data: { endedAt },
+      data: { endAt },
     });
-  }
-
-  findById(seasonId: string): Promise<Season | null> {
-    return this.prisma.season.findUnique({ where: { id: seasonId } });
   }
 
   findAllActiveWeekly(): Promise<Season[]> {
     return this.prisma.season.findMany({
-      where: { type: SeasonType.WEEKLY, endedAt: null },
-      orderBy: { startedAt: 'asc' },
+      where: { endAt: null },
+      orderBy: { startAt: 'asc' },
+    });
+  }
+
+  findActiveWeeklyByGameIds(gameIds: string[]): Promise<Season[]> {
+    if (gameIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.prisma.season.findMany({
+      where: {
+        gameId: { in: gameIds },
+        endAt: null,
+      },
+      orderBy: { startAt: 'asc' },
     });
   }
 }

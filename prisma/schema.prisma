@@ -7,83 +7,91 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum GuestStatus {
-  NORMAL
-  SHADOW
-  BLOCKED
-}
+model Game {
+  id        String   @id
+  name      String
+  isActive  Boolean  @default(true)
+  config    Json?
+  createdAt DateTime @default(now())
 
-enum SeasonType {
-  WEEKLY
+  gameResults       GameResult[]
+  seasons           Season[]
+  leaderboardGlobal LeaderboardGlobal[]
+  leaderboardWeekly LeaderboardWeekly[]
+
+  @@map("games")
 }
 
 model GuestPlayer {
-  id           String      @id @default(uuid())
-  createdAt    DateTime    @default(now())
-  lastActiveAt DateTime    @default(now())
-  trustScore   Int         @default(100)
-  status       GuestStatus @default(NORMAL)
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
 
   gameResults       GameResult[]
-  leaderboardGlobal LeaderboardGlobal?
+  leaderboardGlobal LeaderboardGlobal[]
   leaderboardWeekly LeaderboardWeekly[]
 
   @@map("guest_players")
 }
 
 model GameResult {
-  id            String   @id @default(uuid())
-  guestId       String
-  score         Int
-  duration      Int
-  seed          Int
-  moves         Json
-  replayHash    String   @unique
-  clientVersion String?
-  createdAt     DateTime @default(now())
-  synced        Boolean  @default(true)
+  id         String   @id @default(uuid())
+  gameId     String
+  guestId    String
+  score      Int
+  duration   Int
+  replayHash String
+  metadata   Json?
+  createdAt  DateTime @default(now())
 
+  game  Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
   guest GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
 
-  @@index([guestId])
-  @@index([score(sort: Desc)])
+  @@unique([gameId, replayHash])
+  @@index([gameId, guestId])
+  @@index([gameId, score(sort: Desc)])
   @@map("game_results")
 }
 
 model Season {
-  id        String     @id @default(uuid())
-  type      SeasonType @default(WEEKLY)
-  startedAt DateTime   @default(now())
-  endedAt   DateTime?
+  id      String    @id @default(uuid())
+  gameId  String
+  startAt DateTime  @default(now())
+  endAt   DateTime?
 
+  game              Game                @relation(fields: [gameId], references: [id], onDelete: Cascade)
   leaderboardWeekly LeaderboardWeekly[]
 
-  @@index([startedAt])
+  @@index([gameId, startAt])
+  @@index([gameId, endAt])
   @@map("seasons")
 }
 
 model LeaderboardGlobal {
-  guestId   String   @id
+  gameId    String
+  guestId   String
   bestScore Int
   updatedAt DateTime @updatedAt
 
+  game  Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
   guest GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
 
-  @@index([bestScore(sort: Desc)])
+  @@id([gameId, guestId])
+  @@index([gameId, bestScore(sort: Desc)])
   @@map("leaderboard_global")
 }
 
 model LeaderboardWeekly {
-  guestId   String
+  gameId    String
   seasonId  String
+  guestId   String
   bestScore Int
   updatedAt DateTime @updatedAt
 
-  guest  GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  game   Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
   season Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  guest  GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
 
-  @@id([guestId, seasonId])
-  @@index([bestScore(sort: Desc)])
-  @@index([seasonId])
+  @@id([gameId, seasonId, guestId])
+  @@index([gameId, seasonId, bestScore(sort: Desc)])
   @@map("leaderboard_weekly")
 }

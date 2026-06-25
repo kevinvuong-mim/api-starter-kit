@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GuestStatus } from '@prisma/client';
 
 import { GAME_CONFIG_KEY, GameConfig } from '@/config/game.config';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { SeasonService } from '@/modules/season/season.service';
-import { GuestRepository } from '@/modules/guest/guest.repository';
+import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { LeaderboardQueryDto } from '@/modules/leaderboard/dto/leaderboard-query.dto';
 import { LeaderboardResponseDto } from '@/modules/leaderboard/dto/leaderboard-response.dto';
 
@@ -14,7 +13,7 @@ export class LeaderboardService {
   constructor(
     private readonly redisRankingService: RedisRankingService,
     private readonly seasonService: SeasonService,
-    private readonly guestRepository: GuestRepository,
+    private readonly gameRegistryService: GameRegistryService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -23,53 +22,34 @@ export class LeaderboardService {
   }
 
   async getGlobalLeaderboard(query: LeaderboardQueryDto): Promise<LeaderboardResponseDto> {
-    const page = query.page ?? 1;
-    const limit = Math.min(query.limit ?? 20, this.config.leaderboardTopLimit);
-    const offset = (page - 1) * limit;
+    await this.gameRegistryService.assertActiveGame(query.gameId);
 
-    const key = this.redisRankingService.getGlobalKey();
-    const top = await this.redisRankingService.getTop(key, limit, offset);
-    const filteredTop = await this.filterEligibleEntries(top);
+    const limit = Math.min(query.limit ?? this.config.leaderboardTopLimit, this.config.leaderboardTopLimit);
+    const key = this.redisRankingService.getGlobalKey(query.gameId);
+    const top = await this.redisRankingService.getTop(key, limit, 0);
 
     let myRank: number | null = null;
     if (query.guestId) {
-      myRank = await this.resolveMyRank(key, query.guestId, filteredTop);
+      myRank = await this.resolveMyRank(key, query.guestId, top);
     }
 
-    return { top: filteredTop, myRank };
+    return { top, myRank };
   }
 
   async getWeeklyLeaderboard(query: LeaderboardQueryDto): Promise<LeaderboardResponseDto> {
-    const page = query.page ?? 1;
-    const limit = Math.min(query.limit ?? 20, this.config.leaderboardTopLimit);
-    const offset = (page - 1) * limit;
+    await this.gameRegistryService.assertActiveGame(query.gameId);
 
-    const season = await this.seasonService.getActiveWeeklySeason();
-    const key = this.redisRankingService.getWeeklyKey(season.id);
-    const top = await this.redisRankingService.getTop(key, limit, offset);
-    const filteredTop = await this.filterEligibleEntries(top);
+    const limit = Math.min(query.limit ?? this.config.leaderboardTopLimit, this.config.leaderboardTopLimit);
+    const season = await this.seasonService.getActiveWeeklySeason(query.gameId);
+    const key = this.redisRankingService.getWeeklyKey(query.gameId, season.id);
+    const top = await this.redisRankingService.getTop(key, limit, 0);
 
     let myRank: number | null = null;
     if (query.guestId) {
-      myRank = await this.resolveMyRank(key, query.guestId, filteredTop);
+      myRank = await this.resolveMyRank(key, query.guestId, top);
     }
 
-    return { top: filteredTop, myRank };
-  }
-
-  private async filterEligibleEntries(
-    entries: Array<{ guestId: string; score: number; rank: number }>,
-  ): Promise<Array<{ guestId: string; score: number; rank: number }>> {
-    const guestIds = entries.map((entry) => entry.guestId);
-    const eligibleGuests = await this.guestRepository.findEligibleForLeaderboard(guestIds);
-    const eligibleIds = new Set(eligibleGuests.map((guest) => guest.id));
-
-    return entries
-      .filter((entry) => eligibleIds.has(entry.guestId))
-      .map((entry, index) => ({
-        ...entry,
-        rank: index + 1,
-      }));
+    return { top, myRank };
   }
 
   private async resolveMyRank(
@@ -77,11 +57,6 @@ export class LeaderboardService {
     guestId: string,
     top: Array<{ guestId: string; rank: number }>,
   ): Promise<number | null> {
-    const guest = await this.guestRepository.findById(guestId);
-    if (!guest || guest.status !== GuestStatus.NORMAL) {
-      return null;
-    }
-
     const inTop = top.find((entry) => entry.guestId === guestId);
     if (inTop) {
       return inTop.rank;

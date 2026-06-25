@@ -5,14 +5,13 @@ import {
   IsArray,
   IsString,
   IsUUID,
+  IsObject,
   IsOptional,
   ValidateNested,
   ArrayMinSize,
   ArrayMaxSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-import { GameMoveDto } from '@/modules/game-session/dto/game-move.dto';
 
 export class GameResultDto {
   @ApiProperty({ example: 1000 })
@@ -22,36 +21,26 @@ export class GameResultDto {
 
   @ApiProperty({ example: 180 })
   @IsInt()
-  @Min(1)
+  @Min(0)
   duration!: number;
 
-  @ApiProperty({ example: 12345 })
-  @IsInt()
-  @Min(0)
-  seed!: number;
-
-  @ApiProperty({ example: [{ action: 'tap', x: 1, y: 2 }] })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => GameMoveDto)
-  moves!: GameMoveDto[];
-
-  @ApiProperty({ example: 'a3f2c1b9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0' })
+  @ApiProperty({
+    example: 'a3f2c1b9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0',
+  })
   @IsString()
   replayHash!: string;
 
-  @ApiPropertyOptional({ example: '1.0.0' })
+  @ApiPropertyOptional({ example: { level: 5, powerUps: ['shield'] } })
   @IsOptional()
-  @IsString()
-  clientVersion?: string;
-
-  @ApiPropertyOptional({ example: '2026-06-20T10:00:00.000Z' })
-  @IsOptional()
-  @IsString()
-  playedAt?: string;
+  @IsObject()
+  metadata?: Record<string, unknown>;
 }
 
 export class SyncGameResultsDto {
+  @ApiProperty({ example: 'puzzle-quest' })
+  @IsString()
+  gameId!: string;
+
   @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   @IsUUID()
   guestId!: string;

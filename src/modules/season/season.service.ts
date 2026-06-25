@@ -3,9 +3,9 @@ import { Cron } from '@nestjs/schedule';
 import { Season } from '@prisma/client';
 
 import { SeasonRepository } from '@/modules/season/season.repository';
+import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { GuestStatus } from '@prisma/client';
 
 @Injectable()
 export class SeasonService implements OnModuleInit {
@@ -13,80 +13,97 @@ export class SeasonService implements OnModuleInit {
 
   constructor(
     private readonly seasonRepository: SeasonRepository,
+    private readonly gameRegistryService: GameRegistryService,
     private readonly redisRankingService: RedisRankingService,
     private readonly prisma: PrismaService,
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.ensureActiveSeason();
+    await this.ensureActiveSeasons();
   }
 
-  async getActiveWeeklySeason(): Promise<Season> {
-    const season = await this.seasonRepository.findActiveWeekly();
+  async getActiveWeeklySeason(gameId: string): Promise<Season> {
+    await this.gameRegistryService.assertActiveGame(gameId);
+
+    const season = await this.seasonRepository.findActiveWeekly(gameId);
     if (season) {
       return season;
     }
 
-    return this.seasonRepository.createWeekly();
+    return this.seasonRepository.createWeekly(gameId);
   }
 
-  async ensureActiveSeason(): Promise<Season> {
-    const season = await this.getActiveWeeklySeason();
-    this.logger.log(`Active weekly season: ${season.id}`);
-    return season;
+  async ensureActiveSeasons(): Promise<void> {
+    const games = await this.gameRegistryService.getActiveGames();
+
+    for (const game of games) {
+      const season = await this.getActiveWeeklySeason(game.id);
+      this.logger.log(`Active weekly season for ${game.id}: ${season.id}`);
+    }
   }
 
   @Cron('0 0 * * 1')
-  async rotateWeeklySeason(): Promise<void> {
-    this.logger.log('Starting weekly season rotation');
+  async rotateWeeklySeasons(): Promise<void> {
+    this.logger.log('Starting weekly season rotation for all games');
 
-    const activeSeasons = await this.seasonRepository.findAllActiveWeekly();
+    const games = await this.gameRegistryService.getActiveGames();
     const now = new Date();
 
-    for (const season of activeSeasons) {
-      await this.seasonRepository.closeSeason(season.id, now);
-      await this.snapshotWeeklyLeaderboard(season.id);
-      this.logger.log(`Closed season ${season.id}`);
-    }
+    for (const game of games) {
+      const activeSeason = await this.seasonRepository.findActiveWeekly(game.id);
+      if (activeSeason) {
+        await this.seasonRepository.closeSeason(activeSeason.id, now);
+        await this.snapshotWeeklyLeaderboard(game.id, activeSeason.id);
+        this.logger.log(`Closed season ${activeSeason.id} for game ${game.id}`);
+      }
 
-    const newSeason = await this.seasonRepository.createWeekly(now);
-    await this.redisRankingService.rebuildWeekly(newSeason.id, []);
-    this.logger.log(`Created new weekly season ${newSeason.id}`);
+      const newSeason = await this.seasonRepository.createWeekly(game.id, now);
+      await this.redisRankingService.rebuildWeekly(game.id, newSeason.id, []);
+      this.logger.log(`Created new weekly season ${newSeason.id} for game ${game.id}`);
+    }
   }
 
   @Cron('0 3 * * *')
   async rebuildRedisLeaderboards(): Promise<void> {
     this.logger.log('Rebuilding Redis leaderboards from database');
 
-    const globalEntries = await this.prisma.leaderboardGlobal.findMany({
-      where: { guest: { status: GuestStatus.NORMAL } },
-      select: { guestId: true, bestScore: true },
-      orderBy: { bestScore: 'desc' },
-    });
+    const games = await this.gameRegistryService.getActiveGames();
 
-    await this.redisRankingService.rebuildGlobal(globalEntries);
+    for (const game of games) {
+      const globalEntries = await this.prisma.leaderboardGlobal.findMany({
+        where: { gameId: game.id },
+        select: { guestId: true, bestScore: true },
+        orderBy: { bestScore: 'desc' },
+      });
 
-    const activeSeason = await this.getActiveWeeklySeason();
-    const weeklyEntries = await this.prisma.leaderboardWeekly.findMany({
-      where: {
-        seasonId: activeSeason.id,
-        guest: { status: GuestStatus.NORMAL },
-      },
-      select: { guestId: true, bestScore: true },
-      orderBy: { bestScore: 'desc' },
-    });
+      await this.redisRankingService.rebuildGlobal(game.id, globalEntries);
 
-    await this.redisRankingService.rebuildWeekly(activeSeason.id, weeklyEntries);
+      const activeSeason = await this.getActiveWeeklySeason(game.id);
+      const weeklyEntries = await this.prisma.leaderboardWeekly.findMany({
+        where: {
+          gameId: game.id,
+          seasonId: activeSeason.id,
+        },
+        select: { guestId: true, bestScore: true },
+        orderBy: { bestScore: 'desc' },
+      });
+
+      await this.redisRankingService.rebuildWeekly(game.id, activeSeason.id, weeklyEntries);
+      this.logger.log(`Rebuilt Redis leaderboards for game ${game.id}`);
+    }
+
     this.logger.log('Redis leaderboard rebuild complete');
   }
 
-  private async snapshotWeeklyLeaderboard(seasonId: string): Promise<void> {
+  private async snapshotWeeklyLeaderboard(gameId: string, seasonId: string): Promise<void> {
     const entries = await this.prisma.leaderboardWeekly.findMany({
-      where: { seasonId },
+      where: { gameId, seasonId },
       orderBy: { bestScore: 'desc' },
       take: 100,
     });
 
-    this.logger.log(`Snapshotted ${entries.length} entries for season ${seasonId}`);
+    this.logger.log(
+      `Snapshotted ${entries.length} entries for game ${gameId}, season ${seasonId}`,
+    );
   }
 }

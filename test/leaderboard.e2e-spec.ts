@@ -1,18 +1,22 @@
+import { createHash } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { INestApplication } from '@nestjs/common';
 
-import { AntiCheatService } from '@/modules/anti-cheat/anti-cheat.service';
 import { createE2eApp } from './setup-e2e-app';
+
+const GAME_ID = 'puzzle-quest';
+
+function computeReplayHash(payload: Record<string, unknown>): string {
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
 
 describe('Leaderboard API (e2e)', () => {
   let app: INestApplication<App>;
   let guestId: string;
-  let antiCheatService: AntiCheatService;
 
   beforeAll(async () => {
     app = await createE2eApp();
-    antiCheatService = app.get(AntiCheatService);
   });
 
   afterAll(async () => {
@@ -27,19 +31,17 @@ describe('Leaderboard API (e2e)', () => {
   });
 
   it('POST /game/sync accepts valid offline results', async () => {
-    const seed = Math.floor(Math.random() * 1_000_000);
     const payload = {
       score: 850,
       duration: 30,
-      seed,
-      moves: [{ action: 'tap', x: 1, y: 2, id: crypto.randomUUID() }],
-      replayHash: '',
+      replayHash: computeReplayHash({ score: 850, duration: 30, nonce: crypto.randomUUID() }),
+      metadata: { level: 3 },
     };
-    payload.replayHash = antiCheatService.computeReplayHash(payload);
 
     const response = await request(app.getHttpServer())
       .post('/game/sync')
       .send({
+        gameId: GAME_ID,
         guestId,
         results: [payload],
       })
@@ -51,31 +53,23 @@ describe('Leaderboard API (e2e)', () => {
   });
 
   it('POST /game/sync is idempotent for duplicate replay hash', async () => {
-    const seed = Math.floor(Math.random() * 1_000_000) + 1_000_000;
-    const moves = [{ action: 'tap', x: 2, y: 3, id: crypto.randomUUID() }];
+    const replayHash = computeReplayHash({ score: 900, duration: 30, nonce: crypto.randomUUID() });
     const payload = {
       score: 900,
       duration: 30,
-      seed,
-      moves,
-      replayHash: antiCheatService.computeReplayHash({
-        score: 900,
-        duration: 30,
-        seed,
-        moves,
-      }),
+      replayHash,
     };
 
     const first = await request(app.getHttpServer())
       .post('/game/sync')
-      .send({ guestId, results: [payload] })
+      .send({ gameId: GAME_ID, guestId, results: [payload] })
       .expect(201);
 
     expect(first.body.data.accepted).toBe(1);
 
     const second = await request(app.getHttpServer())
       .post('/game/sync')
-      .send({ guestId, results: [payload] })
+      .send({ gameId: GAME_ID, guestId, results: [payload] })
       .expect(201);
 
     expect(second.body.data.accepted).toBe(1);
@@ -85,7 +79,7 @@ describe('Leaderboard API (e2e)', () => {
   it('GET /leaderboard/global returns top players', async () => {
     const response = await request(app.getHttpServer())
       .get('/leaderboard/global')
-      .query({ guestId, page: 1, limit: 10 })
+      .query({ gameId: GAME_ID, guestId, limit: 10 })
       .expect(200);
 
     expect(response.body.data).toHaveProperty('top');
@@ -96,7 +90,7 @@ describe('Leaderboard API (e2e)', () => {
   it('GET /leaderboard/weekly returns weekly standings', async () => {
     const response = await request(app.getHttpServer())
       .get('/leaderboard/weekly')
-      .query({ guestId, page: 1, limit: 10 })
+      .query({ gameId: GAME_ID, guestId, limit: 10 })
       .expect(200);
 
     expect(response.body.data).toHaveProperty('top');

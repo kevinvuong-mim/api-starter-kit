@@ -1,16 +1,16 @@
-# Game Leaderboard API
+# Multi-Game Leaderboard API
 
-Offline-first guest leaderboard backend for mobile games (Phaser + Capacitor). Built with NestJS, PostgreSQL, Prisma, and Redis.
+Scalable, multi-game guest leaderboard backend for mobile games. Built with NestJS, PostgreSQL, Prisma, and Redis.
 
 ## Features
 
-- **Guest initialization** — anonymous players, no login required
-- **Offline game sync** — batch upload of game results with idempotent replay handling
-- **Global leaderboard** — all-time best scores
-- **Weekly leaderboard** — best scores for the active weekly season
-- **Anti-cheat** — score, duration, replay hash, seed, and duplicate detection with trust scoring
-- **Redis rankings** — sorted sets for fast top-100 and rank lookups
-- **Background jobs** — weekly season rotation and daily Redis rebuild
+- **Multi-game support** — each game has its own leaderboards, seasons, and Redis keys
+- **Guest initialization** — anonymous players shared across games (no login)
+- **Offline game sync** — batch upload with idempotent replay handling
+- **Global & weekly leaderboards** — top 100 + user rank when outside top
+- **Replay-only anti-cheat** — SHA-256 replay hash validation and duplicate detection only
+- **Redis sorted sets** — fast ranking via `ZADD`, `ZREVRANGE`, `ZREVRANK`
+- **Per-game cron jobs** — independent weekly season rotation and daily Redis rebuild
 
 ## Tech Stack
 
@@ -46,27 +46,20 @@ DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
 REDIS_URL="redis://localhost:6379"
 PORT=3000
 NODE_ENV="development"
-
-# Anti-cheat tuning
-GAME_MAX_SCORE=1000000
-GAME_MIN_DURATION_SECONDS=5
-GAME_MAX_ACTIONS_PER_SECOND=10
-GAME_TRUST_PENALTY=20
-GAME_SHADOW_THRESHOLD=60
-GAME_BLOCKED_THRESHOLD=20
+GAME_LEADERBOARD_TOP_LIMIT=100
 ```
 
 ## Project Structure
 
 ```
 src/
-├── config/                 # Game configuration
+├── config/                 # App configuration
 ├── modules/
 │   ├── guest/              # Guest player initialization
-│   ├── game-session/       # Offline result sync
+│   ├── game/               # Game sync + registry
+│   ├── replay/             # Replay hash validation (anti-cheat)
 │   ├── leaderboard/        # Global & weekly rankings
-│   ├── anti-cheat/         # Cheat detection rules
-│   ├── season/             # Weekly seasons + cron jobs
+│   ├── season/             # Per-game weekly seasons + cron jobs
 │   ├── redis/              # Redis sorted set service
 │   └── prisma/             # Database client
 ├── common/                 # Filters, interceptors, interfaces
@@ -75,6 +68,17 @@ prisma/
 ├── schema.prisma
 └── migrations/
 ```
+
+## Adding a New Game
+
+Insert a row into the `games` table — no code changes required:
+
+```sql
+INSERT INTO games (id, name, "isActive", config)
+VALUES ('my-new-game', 'My New Game', true, '{"leaderboardTopLimit": 100}');
+```
+
+The core sync, leaderboard, and season logic automatically applies to the new `gameId`.
 
 ## API Reference
 
@@ -93,7 +97,7 @@ All success responses are wrapped:
 
 ### POST /guest/init
 
-Create a new guest player.
+Create a new guest player (shared across all games).
 
 **Response `data`:**
 
@@ -103,8 +107,6 @@ Create a new guest player.
 }
 ```
 
-**Example:**
-
 ```bash
 curl -X POST http://localhost:3000/guest/init
 ```
@@ -113,22 +115,20 @@ curl -X POST http://localhost:3000/guest/init
 
 ### POST /game/sync
 
-Batch sync offline game results. Idempotent by `replayHash`.
+Batch sync offline game results. Idempotent by `replayHash` per game.
 
 **Request:**
 
 ```json
 {
+  "gameId": "puzzle-quest",
   "guestId": "550e8400-e29b-41d4-a716-446655440000",
   "results": [
     {
       "score": 1000,
       "duration": 180,
-      "seed": 12345,
-      "moves": [{ "action": "tap", "x": 1, "y": 2 }],
-      "replayHash": "a3f2c1...",
-      "clientVersion": "1.0.0",
-      "playedAt": "2026-06-20T10:00:00.000Z"
+      "replayHash": "a3f2c1b9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+      "metadata": { "level": 5, "powerUps": ["shield"] }
     }
   ]
 }
@@ -146,42 +146,36 @@ Batch sync offline game results. Idempotent by `replayHash`.
 
 **Replay hash (client-side):**
 
+Each game computes its own SHA-256 hash from game-specific replay data. The server only validates format and uniqueness — it does not recompute or verify the hash contents.
+
 ```typescript
 import { createHash } from 'crypto';
 
-function computeReplayHash(result: {
-  seed: number;
-  score: number;
-  duration: number;
-  moves: unknown[];
-}): string {
-  const payload = `${result.seed}:${result.score}:${result.duration}:${JSON.stringify(result.moves)}`;
-  return createHash('sha256').update(payload).digest('hex');
+function computeReplayHash(replayData: unknown): string {
+  return createHash('sha256').update(JSON.stringify(replayData)).digest('hex');
 }
 ```
-
-**Example:**
 
 ```bash
 curl -X POST http://localhost:3000/game/sync \
   -H "Content-Type: application/json" \
   -d '{
+    "gameId": "puzzle-quest",
     "guestId": "YOUR_GUEST_ID",
     "results": [{
       "score": 1000,
       "duration": 60,
-      "seed": 42,
-      "moves": [{"action": "tap", "x": 1, "y": 2}],
-      "replayHash": "COMPUTED_HASH"
+      "replayHash": "YOUR_64_CHAR_SHA256_HEX",
+      "metadata": { "level": 1 }
     }]
   }'
 ```
 
 ---
 
-### GET /leaderboard/global
+### GET /leaderboard/global?gameId=xxx
 
-**Query:** `page` (default 1), `limit` (default 20, max 100), `guestId` (optional, for `myRank`)
+**Query:** `gameId` (required), `limit` (default 100, max 100), `guestId` (optional, for `myRank`)
 
 **Response `data`:**
 
@@ -195,54 +189,55 @@ curl -X POST http://localhost:3000/game/sync \
 }
 ```
 
-**Example:**
-
 ```bash
-curl "http://localhost:3000/leaderboard/global?guestId=YOUR_GUEST_ID&page=1&limit=20"
+curl "http://localhost:3000/leaderboard/global?gameId=puzzle-quest&guestId=YOUR_GUEST_ID&limit=100"
 ```
 
 ---
 
-### GET /leaderboard/weekly
+### GET /leaderboard/weekly?gameId=xxx
 
-Same query params and response shape as global, scoped to the active weekly season.
+Same query params and response shape as global, scoped to the active weekly season for the given game.
 
 ```bash
-curl "http://localhost:3000/leaderboard/weekly?guestId=YOUR_GUEST_ID&page=1&limit=20"
+curl "http://localhost:3000/leaderboard/weekly?gameId=puzzle-quest&guestId=YOUR_GUEST_ID&limit=100"
 ```
 
-## Anti-Cheat
+## Anti-Cheat (Replay Hash Only)
+
+The `ReplayService` validates **only** replay hashes:
 
 | Rule | Action |
 |------|--------|
-| Score > max or < 0 | Reject |
-| Duration below minimum | Reject |
-| Actions/second too high | Reject |
-| Invalid replay hash | Reject |
-| Invalid seed | Reject |
-| Duplicate replay (other player) | Reject |
+| Missing replay hash | Reject |
+| Invalid format (not 64-char SHA-256 hex) | Reject |
+| Duplicate replay hash (different guest, same game) | Reject |
+| Same guest resubmits same hash | Accept (idempotent) |
 
-**Trust score:** starts at 100. Each violation: **-20**.
-
-| Trust Score | Status | Effect |
-|-------------|--------|--------|
-| 60–100 | NORMAL | Full leaderboard access |
-| 20–59 | SHADOW | Scores stored, hidden from public boards |
-| 0–19 | BLOCKED | Cannot sync |
+No score validation, physics checks, seed validation, trust scoring, or server-side replay simulation.
 
 ## Background Jobs
 
 | Schedule | Job |
 |----------|-----|
-| Monday 00:00 | Close weekly season, snapshot, open new season |
-| Daily 03:00 | Rebuild Redis leaderboards from PostgreSQL |
+| Monday 00:00 | Close weekly season per game, snapshot, open new season |
+| Daily 03:00 | Rebuild Redis leaderboards from PostgreSQL per game |
 
 ## Redis Keys
 
 | Key | Purpose |
 |-----|---------|
-| `lb:global` | Global all-time rankings |
-| `lb:weekly:{seasonId}` | Weekly season rankings |
+| `lb:global:{gameId}` | Global all-time rankings |
+| `lb:weekly:{gameId}:{seasonId}` | Weekly season rankings |
+
+## Database Models
+
+- **Game** — registered game with optional config JSON
+- **GuestPlayer** — anonymous player (shared across games)
+- **GameResult** — synced match scoped by `gameId`, unique `replayHash` per game
+- **Season** — weekly competitive period per game
+- **LeaderboardGlobal** — all-time best score per guest per game
+- **LeaderboardWeekly** — best score per guest per game per season
 
 ## Testing
 
@@ -261,14 +256,6 @@ npm run start:prod        # Run production build
 npm run prisma:migrate    # Run migrations
 npm run prisma:generate   # Generate Prisma client
 ```
-
-## Database Models
-
-- **GuestPlayer** — anonymous player with trust score and status
-- **GameResult** — synced match with replay hash (unique, idempotent)
-- **Season** — weekly competitive periods
-- **LeaderboardGlobal** — all-time best score per guest
-- **LeaderboardWeekly** — best score per guest per season
 
 ## Deployment
 
