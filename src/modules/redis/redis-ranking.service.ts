@@ -1,13 +1,30 @@
 import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Logger, Injectable, OnModuleDestroy } from '@nestjs/common';
 
 import { REDIS_KEYS, REDIS_CLIENT, LeaderboardEntry } from '@/modules/redis/redis.constants';
 
 const LEADERBOARD_TOP_LIMIT = 100;
+const REDIS_UPDATE_MAX_RETRIES = 3;
+const REDIS_UPDATE_RETRY_DELAY_MS = 100;
+
+// Atomic: chỉ cập nhật khi score mới lớn hơn score hiện tại (hoặc member chưa tồn tại).
+const UPDATE_SCORE_SCRIPT = `
+local current = redis.call('ZSCORE', KEYS[1], ARGV[1])
+if current == false or tonumber(ARGV[2]) > tonumber(current) then
+  return redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
+end
+return 0
+`;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 @Injectable()
 export class RedisRankingService implements OnModuleDestroy {
+  private readonly logger = new Logger(RedisRankingService.name);
+
   constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   async onModuleDestroy() {
@@ -15,9 +32,23 @@ export class RedisRankingService implements OnModuleDestroy {
   }
 
   async updateScore(key: string, guestId: string, score: number): Promise<void> {
-    // GT: chỉ cập nhật khi score mới lớn hơn score hiện tại (atomic, tránh race read-then-write).
-    // Nếu member chưa tồn tại, GT vẫn thêm mới.
-    await this.redis.zadd(key, 'GT', score, guestId);
+    for (let attempt = 1; attempt <= REDIS_UPDATE_MAX_RETRIES; attempt++) {
+      try {
+        await this.redis.eval(UPDATE_SCORE_SCRIPT, 1, key, guestId, String(score));
+        return;
+      } catch (error) {
+        if (attempt === REDIS_UPDATE_MAX_RETRIES) {
+          // Postgres là source of truth; cron rebuild sẽ đồng bộ lại Redis.
+          this.logger.warn(
+            `Redis updateScore failed after ${REDIS_UPDATE_MAX_RETRIES} attempts for ${key}/${guestId}`,
+            error instanceof Error ? error.stack : error,
+          );
+          return;
+        }
+
+        await sleep(REDIS_UPDATE_RETRY_DELAY_MS * attempt);
+      }
+    }
   }
 
   async getTop(
@@ -38,6 +69,10 @@ export class RedisRankingService implements OnModuleDestroy {
     }
 
     return entries;
+  }
+
+  async getCount(key: string): Promise<number> {
+    return this.redis.zcard(key);
   }
 
   async getPlayerRank(

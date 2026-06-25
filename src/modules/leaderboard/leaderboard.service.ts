@@ -14,18 +14,30 @@ export class LeaderboardService {
     private readonly redisRankingService: RedisRankingService,
   ) {}
 
-  async getGlobalLeaderboard(query: LeaderboardQueryDto): Promise<LeaderboardResponseDto> {
+  async getGlobalLeaderboard(
+    query: LeaderboardQueryDto,
+    guestId?: string,
+  ): Promise<LeaderboardResponseDto> {
     await this.gameRegistryService.assertActiveGame(query.gameId);
 
-    const limit = Math.min(query.limit ?? 100, 100);
+    const page = query.page;
+    const limit = Math.min(query.limit, 100);
+    const offset = (page - 1) * limit;
     const key = this.redisRankingService.getGlobalKey(query.gameId);
-    const top = await this.redisRankingService.getTop(key, limit, 0);
+
+    const [top, total] = await Promise.all([
+      this.redisRankingService.getTop(key, limit, offset),
+      this.redisRankingService.getCount(key),
+    ]);
+
     const names = await this.resolveGuestNames(top.map((entry) => entry.guestId));
 
     let myRank: number | null = null;
-    if (query.guestId) {
-      myRank = await this.resolveMyRank(key, query.guestId, top);
+    if (guestId) {
+      myRank = await this.resolveMyRank(key, guestId, top);
     }
+
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
 
     return {
       top: top.map((entry) => ({
@@ -33,6 +45,12 @@ export class LeaderboardService {
         name: names.get(entry.guestId) ?? null,
       })),
       myRank,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
     };
   }
 

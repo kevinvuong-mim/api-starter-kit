@@ -2,7 +2,7 @@
 
 ## Overview
 
-API lấy bảng xếp hạng toàn cục (all-time) theo game. Dữ liệu ranking lấy từ Redis sorted set, tên guest resolve từ PostgreSQL. Hỗ trợ xem top N và rank của guest hiện tại (kể cả khi nằm ngoài top).
+API lấy bảng xếp hạng toàn cục (all-time) theo game. Dữ liệu ranking lấy từ Redis sorted set, tên guest resolve từ PostgreSQL. Hỗ trợ pagination, xem top N và rank của guest hiện tại (kể cả khi nằm ngoài top).
 
 **Base URL**: `/api/leaderboard`
 
@@ -12,11 +12,11 @@ API lấy bảng xếp hạng toàn cục (all-time) theo game. Dữ liệu rank
 
 ### Get Global Leaderboard (Bảng xếp hạng toàn cục)
 
-Lấy danh sách top players và (tuỳ chọn) rank của guest cụ thể.
+Lấy danh sách top players theo trang và (tuỳ chọn) rank của guest đang đăng nhập.
 
 **Endpoint**: `GET /api/leaderboard/global`
 
-**Authentication**: Không yêu cầu (Public)
+**Authentication**: Optional session token (cần để lấy `myRank`)
 
 **Rate Limit**: 100 requests / phút / IP
 
@@ -25,11 +25,16 @@ Lấy danh sách top players và (tuỳ chọn) rank của guest cụ thể.
 | Parameter | Type   | Required | Default | Validation              | Description                              |
 | --------- | ------ | -------- | ------- | ----------------------- | ---------------------------------------- |
 | gameId    | string | Yes      | —       | Game phải tồn tại, active | ID của game                            |
-| limit     | number | No       | 100     | Min: 1, Max: 100        | Số lượng entries trả về (top N)          |
-| guestId   | string | No       | —       | UUID format             | Guest ID để lấy `myRank`                 |
-| page      | number | No       | 1       | Min: 1                  | *(Hiện chưa dùng — luôn trả top từ đầu)* |
+| page      | number | No       | 1       | Min: 1                  | Trang hiện tại (1-based)                 |
+| limit     | number | No       | 100     | Min: 1, Max: 100        | Số entries mỗi trang                     |
 
-**Lưu ý**: `page` có trong DTO nhưng service hiện tại luôn trả top từ rank 1 với `offset = 0`.
+#### Headers (optional)
+
+```
+Authorization: Bearer <sessionToken>
+```
+
+Truyền `sessionToken` để server trả về `myRank` của guest tương ứng. Không truyền header → `myRank: null`.
 
 #### Response
 
@@ -55,30 +60,48 @@ Lấy danh sách top players và (tuỳ chọn) rank của guest cụ thể.
         "score": 4800
       }
     ],
-    "myRank": 123
+    "myRank": 123,
+    "pagination": {
+      "page": 1,
+      "limit": 100,
+      "total": 250,
+      "totalPages": 3
+    }
   },
   "timestamp": "2026-06-25T12:00:00.000Z",
-  "path": "/api/leaderboard/global?gameId=puzzle-quest&guestId=550e8400-e29b-41d4-a716-446655440000"
+  "path": "/api/leaderboard/global?gameId=puzzle-quest&page=1&limit=100"
 }
 ```
 
 #### Response Schema
 
-| Field              | Type         | Description                                           |
-| ------------------ | ------------ | ----------------------------------------------------- |
-| top                | array        | Danh sách top players                                 |
-| top[].rank         | number       | Thứ hạng (1-based)                                    |
-| top[].guestId      | string       | UUID của guest                                        |
-| top[].name         | string\|null | Tên hiển thị (null nếu guest chưa set name)          |
-| top[].score        | number       | Best score (all-time)                                 |
-| myRank             | number\|null | Rank của guest (chỉ khi truyền `guestId`)             |
+| Field                    | Type         | Description                                           |
+| ------------------------ | ------------ | ----------------------------------------------------- |
+| top                      | array        | Danh sách players trên trang hiện tại                 |
+| top[].rank               | number       | Thứ hạng toàn cục (1-based, tính theo offset)         |
+| top[].guestId            | string       | UUID của guest                                        |
+| top[].name               | string\|null | Tên hiển thị (null nếu guest chưa set name)          |
+| top[].score              | number       | Best score (all-time)                                 |
+| myRank                   | number\|null | Rank của guest (chỉ khi truyền `sessionToken`)        |
+| pagination.page          | number       | Trang hiện tại                                        |
+| pagination.limit         | number       | Số entries mỗi trang                                  |
+| pagination.total         | number       | Tổng số players trên leaderboard                      |
+| pagination.totalPages    | number       | Tổng số trang (`ceil(total / limit)`)               |
 
 **myRank behavior**:
 
-- Không truyền `guestId` → `myRank: null`
-- Guest trong top → `myRank` = rank trong `top` array
+- Không truyền `Authorization` header → `myRank: null`
+- Guest trong `top` array → `myRank` = rank trong `top`
 - Guest ngoài top → query Redis `ZREVRANK` để lấy rank thực
 - Guest chưa có điểm → `myRank: null`
+- Token không hợp lệ → bỏ qua silently, `myRank: null` (optional auth)
+
+**Pagination behavior**:
+
+- `offset = (page - 1) * limit`
+- `rank` trong `top` array phản ánh thứ hạng toàn cục (ví dụ page 2, limit 50 → rank bắt đầu từ 51)
+- `total` lấy từ Redis `ZCARD`
+- `totalPages = 0` khi leaderboard trống
 
 **Error Responses**
 
@@ -120,16 +143,23 @@ Lấy danh sách top players và (tuỳ chọn) rank của guest cụ thể.
 
 #### cURL Examples
 
-**Lấy top 100 (mặc định):**
+**Lấy trang 1 (mặc định, top 100):**
 
 ```bash
 curl "http://localhost:3000/api/leaderboard/global?gameId=puzzle-quest"
 ```
 
-**Lấy top 50 kèm rank của guest:**
+**Lấy trang 2, 50 entries mỗi trang:**
 
 ```bash
-curl "http://localhost:3000/api/leaderboard/global?gameId=puzzle-quest&guestId=550e8400-e29b-41d4-a716-446655440000&limit=50"
+curl "http://localhost:3000/api/leaderboard/global?gameId=puzzle-quest&page=2&limit=50"
+```
+
+**Lấy top 50 kèm rank của guest (qua session token):**
+
+```bash
+curl "http://localhost:3000/api/leaderboard/global?gameId=puzzle-quest&limit=50" \
+  -H "Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7"
 ```
 
 ---
@@ -137,12 +167,15 @@ curl "http://localhost:3000/api/leaderboard/global?gameId=puzzle-quest&guestId=5
 ## Business Logic
 
 1. **Validate game**: `GameRegistryService.assertActiveGame(gameId)`
-2. **Fetch top from Redis**: `ZREVRANGE` trên key `lb:global:{gameId}`, limit tối đa 100
-3. **Resolve names**: Batch query `guest_players` cho các `guestId` trong top
-4. **Resolve myRank** (nếu có `guestId`):
+2. **Resolve guest** (optional): `OptionalGuestAuthGuard` đọc `sessionToken` từ header
+3. **Calculate pagination**: `offset = (page - 1) * limit`
+4. **Fetch top from Redis**: `ZREVRANGE` trên key `lb:global:{gameId}` với offset/limit
+5. **Fetch total**: `ZCARD` trên cùng key
+6. **Resolve names**: Batch query `guest_players` cho các `guestId` trong top
+7. **Resolve myRank** (nếu có guest từ token):
    - Tìm trong top array trước
    - Nếu không có → `RedisRankingService.getPlayerRank()`
-5. **Return**: `{ top, myRank }`
+8. **Return**: `{ top, myRank, pagination }`
 
 ### Data Sources
 
@@ -166,9 +199,10 @@ Cron job chạy hàng ngày lúc 03:00 rebuild Redis từ PostgreSQL cho mọi a
 
 **Steps**:
 
-1. Gọi `GET /api/leaderboard/global?gameId=xxx&limit=100`
+1. Gọi `GET /api/leaderboard/global?gameId=xxx&page=1&limit=100`
 2. Render `top` array với rank, name, score
-3. Hiển thị `name` fallback (ví dụ "Anonymous") khi `name` là null
+3. Dùng `pagination` để hiển thị page controls
+4. Hiển thị `name` fallback (ví dụ "Anonymous") khi `name` là null
 
 ### Use Case 2: Hiển thị rank cá nhân
 
@@ -176,9 +210,19 @@ Cron job chạy hàng ngày lúc 03:00 rebuild Redis từ PostgreSQL cho mọi a
 
 **Steps**:
 
-1. Gọi API kèm `guestId` của user
+1. Gọi API kèm header `Authorization: Bearer <sessionToken>`
 2. Dùng `myRank` để hiển thị (ví dụ "Your rank: #123")
 3. Nếu `myRank` null → user chưa có điểm trên leaderboard
+
+### Use Case 3: Phân trang leaderboard lớn
+
+**Scenario**: Leaderboard có hàng trăm players, cần load từng trang.
+
+**Steps**:
+
+1. Gọi page 1: `?gameId=xxx&page=1&limit=50`
+2. Dùng `pagination.totalPages` để biết tổng số trang
+3. Load trang tiếp theo: `?gameId=xxx&page=2&limit=50`
 
 ---
 
@@ -186,7 +230,7 @@ Cron job chạy hàng ngày lúc 03:00 rebuild Redis từ PostgreSQL cho mọi a
 
 - [Sync Game Results](../game/sync-game-results.md) — Upload kết quả để lên bảng xếp hạng
 - [Update Guest Name](../guest/update-guest-name.md) — Đặt tên hiển thị trên leaderboard
-- [Init Guest](../guest/init-guest.md) — Tạo guest player
+- [Init Guest](../guest/init-guest.md) — Tạo guest player và lấy `sessionToken`
 
 ---
 
@@ -208,15 +252,15 @@ Cron job chạy hàng ngày lúc 03:00 rebuild Redis từ PostgreSQL cho mọi a
 
 **Cause**:
 
-- `guestId` sai hoặc chưa truyền
-- Score chưa đủ để vào leaderboard (unlikely — mọi score đều được lưu)
+- Không truyền `Authorization` header
+- `sessionToken` sai hoặc guest đã bị xóa
 - Guest chưa sync thành công (tất cả results rejected)
 
 **Solution**:
 
+- Thêm header `Authorization: Bearer <sessionToken>`
 - Kiểm tra response từ sync (`accepted > 0`)
-- Verify `guestId` đúng UUID
-- Đảm bảo truyền `guestId` trong query string
+- Lấy token mới từ `POST /api/guest/init` nếu cần
 
 ### Problem: Rank không khớp sau sync
 
@@ -224,18 +268,28 @@ Cron job chạy hàng ngày lúc 03:00 rebuild Redis từ PostgreSQL cho mọi a
 
 **Solution**:
 
-- Leaderboard update realtime qua `ZADD` khi sync
+- Leaderboard update realtime qua Lua script khi sync
 - Cron job rebuild hàng ngày để đồng bộ
 - Refresh sau vài giây nếu cần
+
+### Problem: Trang trống dù `total > 0`
+
+**Cause**: `page` vượt quá `totalPages`.
+
+**Solution**:
+
+- Kiểm tra `pagination.totalPages` trước khi request
+- Clamp `page` về giá trị hợp lệ trên client
 
 ---
 
 ## Notes
 
 - **Read-only endpoint**: Chỉ GET, không modify data
-- **Max limit**: 100 entries — values > 100 bị cap
+- **Max limit**: 100 entries mỗi trang — values > 100 bị cap
 - **Per-game leaderboard**: Mỗi `gameId` có Redis key riêng
 - **All-time rankings**: Không có weekly/monthly reset
 - **Name resolution**: Realtime từ DB — đổi tên có hiệu lực ngay
-- **No pagination**: Hiện chỉ hỗ trợ top N từ đầu bảng (không offset/page)
+- **Pagination**: Hỗ trợ `page` + `limit` với metadata `total` / `totalPages`
+- **Optional auth**: `sessionToken` qua header, không qua query string
 - **Redis key format**: `lb:global:{gameId}`

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { GuestPlayer } from '@prisma/client';
 
@@ -8,11 +9,17 @@ export class GuestRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   create(): Promise<GuestPlayer> {
-    return this.prisma.guestPlayer.create({ data: {} });
+    return this.prisma.guestPlayer.create({
+      data: { sessionToken: randomUUID() },
+    });
   }
 
   findById(id: string): Promise<GuestPlayer | null> {
     return this.prisma.guestPlayer.findUnique({ where: { id } });
+  }
+
+  findBySessionToken(sessionToken: string): Promise<GuestPlayer | null> {
+    return this.prisma.guestPlayer.findUnique({ where: { sessionToken } });
   }
 
   updateName(id: string, name: string): Promise<GuestPlayer> {

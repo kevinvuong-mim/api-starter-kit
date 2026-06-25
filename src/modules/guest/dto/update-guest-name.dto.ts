@@ -1,10 +1,7 @@
 import { Transform } from 'class-transformer';
-import { IsUUID, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsString, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateGuestNameDto {
-  @IsUUID()
-  guestId!: string;
-
   @IsString()
   @MinLength(1)
   @MaxLength(20)

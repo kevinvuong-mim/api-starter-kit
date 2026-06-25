@@ -5,7 +5,15 @@ export class LeaderboardEntryDto {
   name!: string | null;
 }
 
+export class LeaderboardPaginationDto {
+  page!: number;
+  limit!: number;
+  total!: number;
+  totalPages!: number;
+}
+
 export class LeaderboardResponseDto {
   myRank!: number | null;
   top!: LeaderboardEntryDto[];
+  pagination!: LeaderboardPaginationDto;
 }

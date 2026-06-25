@@ -79,8 +79,8 @@ curl http://localhost:3000/api
 
 ## Related Endpoints
 
-- **POST /api/guest/init**: Khởi tạo guest player
-- **GET /api/leaderboard/global**: Lấy bảng xếp hạng
+- **POST /api/guest/init**: Khởi tạo guest player (trả về `guestId` + `sessionToken`)
+- **GET /api/leaderboard/global**: Lấy bảng xếp hạng (pagination, optional `sessionToken` cho `myRank`)
 
 ---
 
@@ -90,3 +90,4 @@ curl http://localhost:3000/api
 - **No authentication**: Có thể gọi mà không cần token
 - **Global prefix**: Tất cả routes đều có prefix `/api` (cấu hình trong `main.ts`)
 - **Automatic wrapping**: Response được wrap bởi `ResponseInterceptor`
+- **CORS**: Server cho phép headers `Content-Type` và `Authorization`

@@ -1,16 +1,16 @@
 import {
   Min,
   IsInt,
-  IsUUID,
   IsArray,
   IsString,
-  IsObject,
   IsOptional,
   ArrayMaxSize,
   ArrayMinSize,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+import { IsValidMetadata } from '@/common/validators/is-valid-metadata.validator';
 
 export class GameResultDto {
   @Min(0)
@@ -24,17 +24,14 @@ export class GameResultDto {
   @IsString()
   replayHash!: string;
 
-  @IsObject()
   @IsOptional()
-  metadata?: Record<string, unknown>;
+  @IsValidMetadata()
+  metadata?: Record<string, string | number | boolean | null>;
 }
 
 export class SyncGameResultsDto {
   @IsString()
   gameId!: string;
-
-  @IsUUID()
-  guestId!: string;
 
   @IsArray()
   @ArrayMinSize(1)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-API cập nhật tên hiển thị (display name) cho guest player. Tên này xuất hiện trên bảng xếp hạng khi guest có trong top rankings.
+API cập nhật tên hiển thị (display name) cho guest player. Tên này xuất hiện trên bảng xếp hạng khi guest có trong top rankings. Endpoint yêu cầu `sessionToken` để xác thực quyền sở hữu guest.
 
 **Base URL**: `/api/guest`
 
@@ -12,11 +12,11 @@ API cập nhật tên hiển thị (display name) cho guest player. Tên này xu
 
 ### Update Guest Display Name (Cập nhật tên hiển thị)
 
-Đặt hoặc thay đổi tên hiển thị của guest.
+Đặt hoặc thay đổi tên hiển thị của guest đang đăng nhập.
 
 **Endpoint**: `PATCH /api/guest/name`
 
-**Authentication**: Không yêu cầu (Public)
+**Authentication**: Yêu cầu session token
 
 **Rate Limit**: 100 requests / phút / IP
 
@@ -24,23 +24,22 @@ API cập nhật tên hiển thị (display name) cho guest player. Tên này xu
 
 ```
 Content-Type: application/json
+Authorization: Bearer <sessionToken>
 ```
 
 #### Request Body
 
 ```json
 {
-  "guestId": "550e8400-e29b-41d4-a716-446655440000",
   "name": "PlayerOne"
 }
 ```
 
 #### Request Fields
 
-| Field     | Type   | Required | Validation                          | Description                    |
-| --------- | ------ | -------- | ----------------------------------- | ------------------------------ |
-| guestId   | string | Yes      | UUID format                         | ID của guest cần cập nhật      |
-| name      | string | Yes      | Min: 1, Max: 20 characters, trimmed | Tên hiển thị trên leaderboard  |
+| Field | Type   | Required | Validation                          | Description                    |
+| ----- | ------ | -------- | ----------------------------------- | ------------------------------ |
+| name  | string | Yes      | Min: 1, Max: 20 characters, trimmed | Tên hiển thị trên leaderboard  |
 
 #### Response
 
@@ -79,12 +78,6 @@ Content-Type: application/json
   "error": "Bad Request",
   "errors": [
     {
-      "field": "guestId",
-      "constraint": "isUuid",
-      "message": "guestId must be a UUID",
-      "value": "invalid-id"
-    },
-    {
       "field": "name",
       "constraint": "maxLength",
       "message": "name must be shorter than or equal to 20 characters",
@@ -96,7 +89,31 @@ Content-Type: application/json
 }
 ```
 
-- **404 Not Found**: Guest không tồn tại
+- **401 Unauthorized**: Thiếu hoặc sai session token
+
+```json
+{
+  "success": false,
+  "statusCode": 401,
+  "message": "Session token required",
+  "error": "Unauthorized",
+  "timestamp": "2026-06-25T12:00:00.000Z",
+  "path": "/api/guest/name"
+}
+```
+
+```json
+{
+  "success": false,
+  "statusCode": 401,
+  "message": "Invalid session token",
+  "error": "Unauthorized",
+  "timestamp": "2026-06-25T12:00:00.000Z",
+  "path": "/api/guest/name"
+}
+```
+
+- **404 Not Found**: Guest không tồn tại (token hợp lệ nhưng guest đã bị xóa)
 
 ```json
 {
@@ -127,8 +144,8 @@ Content-Type: application/json
 ```bash
 curl -X PATCH http://localhost:3000/api/guest/name \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7" \
   -d '{
-    "guestId": "550e8400-e29b-41d4-a716-446655440000",
     "name": "PlayerOne"
   }'
 ```
@@ -137,10 +154,11 @@ curl -X PATCH http://localhost:3000/api/guest/name \
 
 ## Validation Rules
 
-### guestId
+### Authentication
 
-- Bắt buộc phải là UUID hợp lệ
-- Guest phải tồn tại trong database
+- Header `Authorization: Bearer <sessionToken>` là bắt buộc
+- `sessionToken` lấy từ response của `POST /api/guest/init`
+- Guest được xác định từ token — **không** truyền `guestId` trong body
 
 ### name
 
@@ -157,22 +175,24 @@ curl -X PATCH http://localhost:3000/api/guest/name \
 
 ## Business Logic
 
-1. **Validate guest**: `GuestService.getGuestOrThrow(guestId)` — throw 404 nếu không tồn tại
-2. **Update name**: `GuestRepository.updateName(guestId, name)` cập nhật bảng `guest_players`
-3. **Return profile**: Trả về `{ guestId, name }`
-4. **Auto-wrap response**: Response được wrap bởi `ResponseInterceptor`
+1. **Authenticate**: `GuestAuthGuard` đọc `Authorization` header, resolve guest từ `sessionToken`
+2. **Validate guest**: `GuestService.getGuestOrThrow(guestId)` — throw 404 nếu không tồn tại
+3. **Update name**: `GuestRepository.updateName(guestId, name)` cập nhật bảng `guest_players`
+4. **Return profile**: Trả về `{ guestId, name }`
+5. **Auto-wrap response**: Response được wrap bởi `ResponseInterceptor`
 
 **Important Notes**:
 
 - Endpoint **ghi đè** tên cũ — không append hay merge
 - Tên không unique — nhiều guest có thể dùng cùng tên hiển thị
 - Thay đổi tên có hiệu lực ngay trên leaderboard (resolve từ database khi query)
+- Chỉ guest sở hữu `sessionToken` mới có thể đổi tên
 
 ---
 
 ## Related Endpoints
 
-- [Init Guest](./init-guest.md) — Tạo guest player mới
+- [Init Guest](./init-guest.md) — Tạo guest player mới và lấy `sessionToken`
 - [Global Leaderboard](../leaderboard/global-leaderboard.md) — Xem tên trên bảng xếp hạng
 - **POST /api/game/sync**: Đồng bộ kết quả game
 
@@ -192,20 +212,21 @@ curl -X PATCH http://localhost:3000/api/guest/name \
 - Đảm bảo guest đã sync ít nhất một kết quả game
 - Kiểm tra guest có trong `top` array hoặc có `myRank`
 
-### Problem: "Guest player not found"
+### Problem: "Invalid session token" hoặc "Session token required"
 
-**Cause**: `guestId` không tồn tại hoặc đã bị xóa.
+**Cause**: Thiếu header `Authorization`, token sai, hoặc guest đã bị xóa.
 
 **Solution**:
 
-- Gọi `POST /api/guest/init` để tạo guest mới
-- Kiểm tra `guestId` lưu trên client có đúng format UUID
+- Kiểm tra header format: `Authorization: Bearer <sessionToken>`
+- Gọi `POST /api/guest/init` để tạo guest mới nếu mất token
+- Đảm bảo token được lưu trong secure storage
 
 ---
 
 ## Notes
 
-- **Public endpoint**: Không cần authentication — bất kỳ ai biết `guestId` đều có thể đổi tên
+- **Authenticated endpoint**: Yêu cầu `sessionToken` — không thể đổi tên guest khác chỉ bằng `guestId`
 - **Trim whitespace**: Khoảng trắng đầu/cuối tự động bị loại bỏ
-- **Response trả về profile**: Khác với một số update endpoint khác, API này trả về data đã cập nhật
+- **Response trả về profile**: API trả về data đã cập nhật
 - **Leaderboard display**: Nếu guest chưa set tên, leaderboard hiển thị `name: null`

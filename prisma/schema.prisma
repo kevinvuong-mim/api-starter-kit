@@ -21,9 +21,10 @@ model Game {
 }
 
 model GuestPlayer {
-  id        String   @id @default(uuid())
-  name      String?
-  createdAt DateTime @default(now())
+  id           String   @id @default(uuid())
+  sessionToken String   @unique @default(uuid())
+  name         String?
+  createdAt    DateTime @default(now())
 
   gameResults GameResult[]
   leaderboard Leaderboard[]

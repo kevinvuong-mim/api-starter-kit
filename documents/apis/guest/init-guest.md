@@ -2,7 +2,7 @@
 
 ## Overview
 
-API khởi tạo guest player (người chơi ẩn danh) mới. Guest được dùng chung cho tất cả game trong hệ thống, không cần đăng nhập. Client lưu `guestId` (UUID) để gửi kèm các request sau.
+API khởi tạo guest player (người chơi ẩn danh) mới. Guest được dùng chung cho tất cả game trong hệ thống, không cần đăng nhập. Client lưu `guestId` (UUID) và `sessionToken` để gửi kèm các request sau.
 
 **Base URL**: `/api/guest`
 
@@ -12,7 +12,7 @@ API khởi tạo guest player (người chơi ẩn danh) mới. Guest được d
 
 ### Initialize Guest (Khởi tạo guest player)
 
-Tạo một guest player mới trong database và trả về `guestId`.
+Tạo một guest player mới trong database và trả về `guestId` cùng `sessionToken`.
 
 **Endpoint**: `POST /api/guest/init`
 
@@ -40,7 +40,8 @@ Không có request body.
   "statusCode": 201,
   "message": "Resource created successfully",
   "data": {
-    "guestId": "550e8400-e29b-41d4-a716-446655440000"
+    "guestId": "550e8400-e29b-41d4-a716-446655440000",
+    "sessionToken": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
   },
   "timestamp": "2026-06-25T12:00:00.000Z",
   "path": "/api/guest/init"
@@ -49,16 +50,19 @@ Không có request body.
 
 #### Response Schema
 
-| Field          | Type   | Description                                    |
-| -------------- | ------ | ---------------------------------------------- |
-| data.guestId   | string | UUID của guest player vừa tạo                  |
+| Field              | Type   | Description                                              |
+| ------------------ | ------ | -------------------------------------------------------- |
+| data.guestId       | string | UUID của guest player vừa tạo                            |
+| data.sessionToken  | string | Session token dùng cho các request cần xác thực guest    |
 
 **Important Notes**:
 
 - `guestId` là UUID v4, được generate tự động bởi database
+- `sessionToken` là UUID v4, unique — dùng làm credential xác thực guest
 - Guest mới chưa có display name (`name = null`)
 - Một guest có thể chơi nhiều game khác nhau với cùng `guestId`
-- Client nên lưu `guestId` vào local storage / secure storage trên thiết bị
+- Client nên lưu **cả** `guestId` và `sessionToken` vào secure storage trên thiết bị
+- `sessionToken` không nên expose công khai — chỉ gửi qua header `Authorization: Bearer <token>`
 
 **Error Responses**
 
@@ -98,8 +102,8 @@ curl -X POST http://localhost:3000/api/guest/init
 
 ## Business Logic
 
-1. **Create guest**: `GuestRepository.create()` tạo record mới trong bảng `guest_players`
-2. **Return ID**: Trả về `{ guestId: guest.id }`
+1. **Create guest**: `GuestRepository.create()` tạo record mới trong bảng `guest_players` kèm `sessionToken`
+2. **Return credentials**: Trả về `{ guestId, sessionToken }`
 3. **Auto-wrap response**: Response được wrap trong standard format bởi `ResponseInterceptor`
 
 ---
@@ -114,37 +118,37 @@ curl -X POST http://localhost:3000/api/guest/init
 
 ## Related Endpoints
 
-- **PATCH /api/guest/name**: Đặt tên hiển thị cho guest
-- **POST /api/game/sync**: Đồng bộ kết quả game
-- **GET /api/leaderboard/global**: Xem bảng xếp hạng (có thể truyền `guestId` để lấy `myRank`)
+- **PATCH /api/guest/name**: Đặt tên hiển thị cho guest (yêu cầu `sessionToken`)
+- **POST /api/game/sync**: Đồng bộ kết quả game (yêu cầu `sessionToken`)
+- **GET /api/leaderboard/global**: Xem bảng xếp hạng (truyền `sessionToken` optional để lấy `myRank`)
 
 ---
 
 ## Troubleshooting
 
-### Problem: Mất `guestId` sau khi cài lại app
+### Problem: Mất `guestId` / `sessionToken` sau khi cài lại app
 
-**Cause**: Guest ID chỉ được lưu trên client, không có cơ chế khôi phục từ server.
+**Cause**: Credentials chỉ được lưu trên client, không có cơ chế khôi phục từ server.
 
 **Solution**:
 
 - Gọi lại `POST /api/guest/init` để tạo guest mới
-- Lưu `guestId` vào persistent storage (Keychain, SharedPreferences, localStorage)
+- Lưu `guestId` và `sessionToken` vào persistent storage (Keychain, SharedPreferences, localStorage)
 
 ### Problem: Guest cũ không tồn tại khi sync game
 
-**Cause**: Guest đã bị xóa khỏi database hoặc `guestId` không hợp lệ.
+**Cause**: Guest đã bị xóa khỏi database hoặc `sessionToken` không hợp lệ.
 
 **Solution**:
 
 - Tạo guest mới qua `POST /api/guest/init`
-- Cập nhật `guestId` trên client
+- Cập nhật credentials trên client
 
 ---
 
 ## Notes
 
 - **Idempotent**: Mỗi lần gọi tạo một guest **mới** — không reuse guest cũ
-- **No authentication**: Không cần JWT hay session
-- **Shared across games**: Cùng một `guestId` dùng cho mọi game trong hệ thống
+- **No login required**: Không cần JWT hay OAuth — chỉ cần `sessionToken` từ init
+- **Shared across games**: Cùng một guest dùng cho mọi game trong hệ thống
 - **Optional display name**: Tên hiển thị được set riêng qua `PATCH /api/guest/name`

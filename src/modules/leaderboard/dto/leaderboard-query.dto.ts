@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { Max, Min, IsInt, IsUUID, IsString, IsOptional } from 'class-validator';
+import { Max, Min, IsInt, IsString } from 'class-validator';
 
 export class LeaderboardQueryDto {
   @IsString()
@@ -7,12 +7,12 @@ export class LeaderboardQueryDto {
 
   @Min(1)
   @IsInt()
-  @Max(100)
-  @IsOptional()
   @Type(() => Number)
-  limit?: number = 100;
+  page: number = 1;
 
-  @IsUUID()
-  @IsOptional()
-  guestId?: string;
+  @Min(1)
+  @IsInt()
+  @Max(100)
+  @Type(() => Number)
+  limit: number = 100;
 }

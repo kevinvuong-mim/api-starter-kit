@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { GuestModule } from '@/modules/guest/guest.module';
 import { RedisModule } from '@/modules/redis/redis.module';
 import { GameRegistryModule } from '@/modules/game/game-registry.module';
 import { LeaderboardService } from '@/modules/leaderboard/leaderboard.service';
@@ -8,7 +9,7 @@ import { LeaderboardMaintenanceService } from '@/modules/leaderboard/leaderboard
 
 @Module({
   controllers: [LeaderboardController],
-  imports: [RedisModule, GameRegistryModule],
+  imports: [GuestModule, RedisModule, GameRegistryModule],
   providers: [LeaderboardService, LeaderboardMaintenanceService],
 })
 export class LeaderboardModule {}
