@@ -49,7 +49,6 @@ DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
 REDIS_URL="redis://localhost:6379"
 PORT=3000
 NODE_ENV="development"
-CORS_ORIGIN="http://localhost:5173,capacitor://localhost,https://localhost"
 ```
 
 | Variable | Description |
@@ -58,7 +57,6 @@ CORS_ORIGIN="http://localhost:5173,capacitor://localhost,https://localhost"
 | `REDIS_URL` | Redis connection string |
 | `PORT` | HTTP port (default `3000`) |
 | `NODE_ENV` | `development` or `production` |
-| `CORS_ORIGIN` | Comma-separated allowed origins (`*` if unset) |
 
 ## Project Structure
 
@@ -313,4 +311,4 @@ npx prisma migrate deploy
 npm run start:prod
 ```
 
-Set `NODE_ENV=production` and configure production `DATABASE_URL`, `REDIS_URL`, and `CORS_ORIGIN`.
+Set `NODE_ENV=production` and configure production `DATABASE_URL` and `REDIS_URL`.

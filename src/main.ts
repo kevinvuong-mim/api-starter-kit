@@ -6,17 +6,6 @@ import { HttpExceptionFilter } from '@/common/filters';
 import { ResponseInterceptor } from '@/common/interceptors';
 import { Logger, HttpException, ValidationPipe } from '@nestjs/common';
 
-function parseCorsOrigins(value: string | undefined): string[] | string {
-  if (!value) return '*';
-
-  const origins = value
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
-  return origins.length > 0 ? origins : '*';
-}
-
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
@@ -36,7 +25,6 @@ async function bootstrap() {
 
   app.enableCors({
     allowedHeaders: ['Content-Type', 'Authorization'],
-    origin: parseCorsOrigins(process.env.CORS_ORIGIN),
     methods: ['GET', 'PUT', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 

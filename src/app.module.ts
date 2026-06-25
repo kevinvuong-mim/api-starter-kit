@@ -15,6 +15,13 @@ import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
 
 @Module({
   controllers: [AppController],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
   imports: [
     GameModule,
     GuestModule,
@@ -30,13 +37,6 @@ import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
       },
     ]),
     ConfigModule.forRoot({ isGlobal: true }),
-  ],
-  providers: [
-    AppService,
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
   ],
 })
 export class AppModule {}
