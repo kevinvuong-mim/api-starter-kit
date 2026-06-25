@@ -1,9 +1,9 @@
+import { Prisma } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
 
 import { GuestService } from '@/modules/guest/guest.service';
 import { GameRepository } from '@/modules/game/game.repository';
 import { ReplayService } from '@/modules/replay/replay.service';
-import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
@@ -12,7 +12,6 @@ import { SyncGameResultsResponseDto } from '@/modules/game/dto/sync-game-results
 @Injectable()
 export class GameService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly guestService: GuestService,
     private readonly replayService: ReplayService,
     private readonly gameRepository: GameRepository,
@@ -48,7 +47,23 @@ export class GameService {
         continue;
       }
 
-      await this.gameRepository.createResult(gameId, guestId, result);
+      try {
+        await this.gameRepository.createResult(gameId, guestId, result);
+      } catch (error) {
+        // Race condition: một request đồng thời đã insert cùng replayHash.
+        // Unique constraint [gameId, replayHash] đảm bảo idempotency -> xử lý theo chủ sở hữu.
+        if (this.isUniqueConstraintError(error)) {
+          const existing = await this.gameRepository.findByReplayHash(gameId, result.replayHash);
+          if (existing?.guestId === guestId) {
+            accepted += 1;
+          } else {
+            rejected += 1;
+          }
+          continue;
+        }
+        throw error;
+      }
+
       await this.updateLeaderboards(gameId, guestId, result.score);
       accepted += 1;
     }
@@ -59,23 +74,18 @@ export class GameService {
   }
 
   private async updateLeaderboards(gameId: string, guestId: string, score: number): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      const currentEntry = await tx.leaderboard.findUnique({
-        where: { gameId_guestId: { gameId, guestId } },
-      });
+    // Postgres là source of truth (atomic upsert giữ best score).
+    // Redis cập nhật sau khi DB ghi thành công; nếu Redis lỗi sẽ được cron rebuild đồng bộ lại,
+    // nên không gộp Redis vào transaction của Postgres (hai hệ thống không transactional với nhau).
+    await this.gameRepository.upsertLeaderboardBest(gameId, guestId, score);
+    await this.redisRankingService.updateScore(
+      this.redisRankingService.getGlobalKey(gameId),
+      guestId,
+      score,
+    );
+  }
 
-      if (!currentEntry || score > currentEntry.bestScore) {
-        await tx.leaderboard.upsert({
-          where: { gameId_guestId: { gameId, guestId } },
-          create: { gameId, guestId, bestScore: score },
-          update: { bestScore: score },
-        });
-        await this.redisRankingService.updateScore(
-          this.redisRankingService.getGlobalKey(gameId),
-          guestId,
-          score,
-        );
-      }
-    });
+  private isUniqueConstraintError(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
   }
 }

@@ -37,4 +37,17 @@ export class GameRepository {
       })
       .then((entry) => entry?.bestScore ?? 0);
   }
+
+  // Atomic upsert: giữ score cao nhất ở mức DB qua ON CONFLICT + GREATEST,
+  // tránh race read-then-write khi nhiều request ghi đồng thời.
+  async upsertLeaderboardBest(gameId: string, guestId: string, score: number): Promise<void> {
+    await this.prisma.$executeRaw`
+      INSERT INTO "leaderboard" ("gameId", "guestId", "bestScore", "updatedAt")
+      VALUES (${gameId}, ${guestId}, ${score}, NOW())
+      ON CONFLICT ("gameId", "guestId")
+      DO UPDATE SET
+        "bestScore" = GREATEST("leaderboard"."bestScore", EXCLUDED."bestScore"),
+        "updatedAt" = NOW()
+    `;
+  }
 }

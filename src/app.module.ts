@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
@@ -28,6 +29,7 @@ import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
         limit: 100,
       },
     ]),
+    ConfigModule.forRoot({ isGlobal: true }),
   ],
   providers: [
     AppService,

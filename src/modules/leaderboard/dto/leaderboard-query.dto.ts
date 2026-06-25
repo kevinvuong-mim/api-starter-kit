@@ -7,12 +7,6 @@ export class LeaderboardQueryDto {
 
   @Min(1)
   @IsInt()
-  @IsOptional()
-  @Type(() => Number)
-  page?: number = 1;
-
-  @Min(1)
-  @IsInt()
   @Max(100)
   @IsOptional()
   @Type(() => Number)

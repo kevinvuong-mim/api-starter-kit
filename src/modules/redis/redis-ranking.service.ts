@@ -15,12 +15,9 @@ export class RedisRankingService implements OnModuleDestroy {
   }
 
   async updateScore(key: string, guestId: string, score: number): Promise<void> {
-    const currentScore = await this.redis.zscore(key, guestId);
-    if (currentScore !== null && Number(currentScore) >= score) {
-      return;
-    }
-
-    await this.redis.zadd(key, score, guestId);
+    // GT: chỉ cập nhật khi score mới lớn hơn score hiện tại (atomic, tránh race read-then-write).
+    // Nếu member chưa tồn tại, GT vẫn thêm mới.
+    await this.redis.zadd(key, 'GT', score, guestId);
   }
 
   async getTop(
