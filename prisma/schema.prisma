@@ -20,16 +20,71 @@ model Game {
   @@map("games")
 }
 
+enum AdRewardSessionStatus {
+  PENDING
+  CLAIMED
+  EXPIRED
+  FAILED
+}
+
 model GuestPlayer {
   id           String   @id @default(uuid())
   sessionToken String   @unique @default(uuid())
   name         String?
   createdAt    DateTime @default(now())
 
-  gameResults GameResult[]
-  leaderboard Leaderboard[]
+  gameResults      GameResult[]
+  leaderboard      Leaderboard[]
+  adRewardSessions AdRewardSession[]
+  adEvents         AdEvent[]
 
   @@map("guest_players")
+}
+
+model AdRewardSession {
+  id             String                @id @default(uuid())
+  guestId        String
+  placement      String
+  provider       String?
+  status         AdRewardSessionStatus @default(PENDING)
+  rewardType     String?
+  rewardAmount   Int?
+  idempotencyKey String?               @unique
+  createdAt      DateTime              @default(now())
+  claimedAt      DateTime?
+  expiresAt      DateTime
+
+  guest GuestPlayer @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([guestId, placement])
+  @@index([guestId, status])
+  @@index([status, expiresAt])
+  @@map("ad_reward_sessions")
+}
+
+model AdEvent {
+  id        String   @id @default(uuid())
+  guestId   String?
+  provider  String?
+  placement String?
+  event     String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  guest GuestPlayer? @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  @@index([event, createdAt])
+  @@index([guestId, createdAt])
+  @@index([placement, event])
+  @@map("ad_events")
+}
+
+model AdConfig {
+  id        String   @id @default("default")
+  config    Json
+  updatedAt DateTime @updatedAt
+
+  @@map("ad_config")
 }
 
 model GameResult {
