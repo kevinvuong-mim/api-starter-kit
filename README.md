@@ -1,6 +1,6 @@
-# Multi-Game Leaderboard API
+# Multi-Game API
 
-Scalable, multi-game guest leaderboard backend for mobile games, with server-verified ads monetization. Built with NestJS, PostgreSQL, Prisma, and Redis.
+Scalable, multi-game guest backend for mobile games, with server-verified ads monetization. Built with NestJS, PostgreSQL, Prisma, and Redis.
 
 ## Features
 
