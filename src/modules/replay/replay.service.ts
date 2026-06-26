@@ -33,27 +33,17 @@ export class ReplayService {
     return { valid: true };
   }
 
-  async validate(
-    gameId: string,
+  validateAgainstExisting(
     guestId: string,
     input: ReplayValidationInput,
-  ): Promise<ReplayValidationResult> {
+    existing: { guestId: string } | null | undefined,
+  ): ReplayValidationResult {
     const formatResult = this.validateFormat(input.replayHash);
     if (!formatResult.valid) {
       return formatResult;
     }
 
-    const duplicate = await this.prisma.gameResult.findUnique({
-      where: {
-        gameId_replayHash: {
-          gameId,
-          replayHash: input.replayHash,
-        },
-      },
-      select: { id: true, guestId: true },
-    });
-
-    if (duplicate && duplicate.guestId !== guestId) {
+    if (existing && existing.guestId !== guestId) {
       return {
         valid: false,
         violation: ReplayViolation.DUPLICATE_REPLAY,
@@ -62,5 +52,23 @@ export class ReplayService {
     }
 
     return { valid: true };
+  }
+
+  async validate(
+    gameId: string,
+    guestId: string,
+    input: ReplayValidationInput,
+  ): Promise<ReplayValidationResult> {
+    const duplicate = await this.prisma.gameResult.findUnique({
+      where: {
+        gameId_replayHash: {
+          gameId,
+          replayHash: input.replayHash,
+        },
+      },
+      select: { guestId: true },
+    });
+
+    return this.validateAgainstExisting(guestId, input, duplicate);
   }
 }

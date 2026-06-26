@@ -36,16 +36,45 @@ export class AdsRepository {
     });
   }
 
-  createRewardSession(input: CreateRewardSessionInput): Promise<AdRewardSession> {
-    return this.prisma.adRewardSession.create({
-      data: {
-        guestId: input.guestId,
-        expiresAt: input.expiresAt,
-        placement: input.placement,
-        rewardType: input.rewardType,
-        rewardAmount: input.rewardAmount,
+  countActivePendingRewardSessions(guestId: string, placement: string): Promise<number> {
+    return this.prisma.adRewardSession.count({
+      where: {
+        guestId,
+        placement,
         status: AdRewardSessionStatus.PENDING,
+        expiresAt: { gt: new Date() },
       },
+    });
+  }
+
+  createRewardSessionIfUnderLimit(
+    input: CreateRewardSessionInput,
+    maxPending: number,
+  ): Promise<AdRewardSession | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const pendingCount = await tx.adRewardSession.count({
+        where: {
+          guestId: input.guestId,
+          placement: input.placement,
+          status: AdRewardSessionStatus.PENDING,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      if (pendingCount >= maxPending) {
+        return null;
+      }
+
+      return tx.adRewardSession.create({
+        data: {
+          guestId: input.guestId,
+          expiresAt: input.expiresAt,
+          placement: input.placement,
+          rewardType: input.rewardType,
+          rewardAmount: input.rewardAmount,
+          status: AdRewardSessionStatus.PENDING,
+        },
+      });
     });
   }
 

@@ -11,11 +11,15 @@ import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 
+import {
+  AD_EVENT_TYPES,
+  DEFAULT_ADS_CONFIG,
+  MAX_PENDING_REWARD_SESSIONS_PER_PLACEMENT,
+} from '@/modules/ads/ads.constants';
 import { AdsRepository } from '@/modules/ads/ads.repository';
 import { ClaimRewardDto } from '@/modules/ads/dto/claim-reward.dto';
 import { StartRewardDto } from '@/modules/ads/dto/start-reward.dto';
 import { UpdateAdsConfigDto } from '@/modules/ads/dto/update-ads-config.dto';
-import { AD_EVENT_TYPES, DEFAULT_ADS_CONFIG } from '@/modules/ads/ads.constants';
 import { AdsConfigResponseDto } from '@/modules/ads/dto/ads-config-response.dto';
 import { AdsMetricsResponseDto } from '@/modules/ads/dto/ads-metrics-response.dto';
 import { ClaimRewardResponseDto } from '@/modules/ads/dto/claim-reward-response.dto';
@@ -74,13 +78,20 @@ export class AdsService {
     const ttlSeconds = Number(this.configService.get('ADS_REWARD_SESSION_TTL_SECONDS') ?? 300);
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
-    const session = await this.adsRepository.createRewardSession({
-      guestId,
-      expiresAt,
-      rewardType: reward.type,
-      placement: dto.placement,
-      rewardAmount: reward.amount,
-    });
+    const session = await this.adsRepository.createRewardSessionIfUnderLimit(
+      {
+        guestId,
+        expiresAt,
+        rewardType: reward.type,
+        placement: dto.placement,
+        rewardAmount: reward.amount,
+      },
+      MAX_PENDING_REWARD_SESSIONS_PER_PLACEMENT,
+    );
+
+    if (!session) {
+      throw new ConflictException('Pending reward session limit reached for this placement');
+    }
 
     await this.adsRepository.logEvent({
       guestId,

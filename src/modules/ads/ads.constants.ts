@@ -18,6 +18,9 @@ export const AD_EVENT_TYPES = {
   OFFLINE_REWARD_BLOCKED: 'offline_reward_blocked',
 } as const;
 
+/** Max non-expired PENDING reward sessions per guest/placement (abuse guard). */
+export const MAX_PENDING_REWARD_SESSIONS_PER_PLACEMENT = 1;
+
 export const DEFAULT_ADS_CONFIG: AdsRuntimeConfig = {
   cooldowns: {
     app_open: 0,

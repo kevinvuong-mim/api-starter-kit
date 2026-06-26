@@ -1,19 +1,21 @@
 # Multi-Game Leaderboard API
 
-Scalable, multi-game guest leaderboard backend for mobile games. Built with NestJS, PostgreSQL, Prisma, and Redis.
+Scalable, multi-game guest leaderboard backend for mobile games, with server-verified ads monetization. Built with NestJS, PostgreSQL, Prisma, and Redis.
 
 ## Features
 
 - **Multi-game support** — each game has its own leaderboard and Redis keys
 - **Guest initialization** — anonymous players shared across games (no login)
+- **Guest session tokens** — `sessionToken` issued at init; protected routes use `Authorization: Bearer <token>`
 - **Guest display names** — optional display name per guest (shown on leaderboards)
 - **Offline game sync** — batch upload (up to 50 results) with idempotent replay handling
-- **Global leaderboard** — top 100 + user rank when outside top
+- **Global leaderboard** — paginated top rankings + optional `myRank` via session token
 - **Replay-only anti-cheat** — SHA-256 replay hash validation and duplicate detection only
 - **Redis sorted sets** — fast ranking via `ZADD`, `ZREVRANGE`, `ZREVRANK`
+- **Ads monetization** — remote config, rewarded ad sessions (start/claim), client event logging, admin metrics
 - **Rate limiting** — 100 requests per minute per IP (NestJS Throttler)
 - **Security** — Helmet headers, CORS, response compression
-- **Daily Redis rebuild** — cron job syncs PostgreSQL leaderboard data to Redis
+- **Background jobs** — daily Redis leaderboard rebuild; pending ad reward session expiry
 
 ## Tech Stack
 
@@ -49,6 +51,10 @@ DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
 REDIS_URL="redis://localhost:6379"
 PORT=3000
 NODE_ENV="development"
+
+# Ads monetization
+ADS_ADMIN_API_KEY="random-api-key"
+ADS_REWARD_SESSION_TTL_SECONDS=300
 ```
 
 | Variable | Description |
@@ -57,6 +63,10 @@ NODE_ENV="development"
 | `REDIS_URL` | Redis connection string |
 | `PORT` | HTTP port (default `3000`) |
 | `NODE_ENV` | `development` or `production` |
+| `ADS_ADMIN_API_KEY` | Secret key for admin ads endpoints (`x-ads-admin-key` header) |
+| `ADS_REWARD_SESSION_TTL_SECONDS` | Reward session expiry in seconds (default `300`) |
+
+See also: [`documents/setup/environment-variables.md`](documents/setup/environment-variables.md)
 
 ## Project Structure
 
@@ -65,8 +75,14 @@ src/
 ├── app.controller.ts       # Health / hello endpoint
 ├── app.module.ts
 ├── main.ts                 # Bootstrap, global prefix, pipes, filters
-├── common/                 # Filters, interceptors, interfaces
+├── common/
+│   ├── auth/               # Guest session guards (required + optional)
+│   ├── filters/            # HTTP exception filter
+│   ├── interceptors/       # Standard response envelope
+│   ├── interfaces/
+│   └── validators/
 ├── modules/
+│   ├── ads/                # Ads config, rewards, events, admin metrics
 │   ├── guest/              # Guest init + display name
 │   ├── game/               # Game sync + registry + repository
 │   ├── replay/             # Replay hash validation (anti-cheat)
@@ -76,7 +92,25 @@ src/
 prisma/
 ├── schema.prisma
 └── migrations/
+documents/                  # Detailed API & task docs (Vietnamese)
 ```
+
+## Authentication
+
+Guest players receive a `sessionToken` from `POST /api/guest/init`. Use it on protected routes:
+
+```
+Authorization: Bearer <sessionToken>
+```
+
+| Auth type | Routes |
+|-----------|--------|
+| Public | `GET /api`, `POST /api/guest/init`, `GET /api/ads/config` |
+| Required (`GuestAuthGuard`) | `PATCH /api/guest/name`, `POST /api/game/sync`, ads reward/events |
+| Optional (`OptionalGuestAuthGuard`) | `GET /api/leaderboard/global` (for `myRank`) |
+| Admin key (`x-ads-admin-key`) | `GET/PATCH /api/ads/admin/*` |
+
+`guestId` is resolved from the token on the server — do not send it in request bodies for protected routes.
 
 ## Adding a New Game
 
@@ -90,164 +124,6 @@ VALUES ('my-new-game', 'My New Game', true);
 The core sync and leaderboard logic automatically applies to the new `gameId`.
 
 Default seeded games: `puzzle-quest`, `arcade-rush`.
-
-## API Reference
-
-All routes are prefixed with `/api`. Success responses are wrapped:
-
-```json
-{
-  "success": true,
-  "data": { ... },
-  "statusCode": 201,
-  "message": "Resource created successfully",
-  "path": "/api/guest/init",
-  "timestamp": "2026-06-25T12:00:00.000Z"
-}
-```
-
-### GET /api
-
-Health / hello endpoint.
-
-**Response `data`:** `"Hello World!"`
-
-```bash
-curl http://localhost:3000/api
-```
-
----
-
-### POST /api/guest/init
-
-Create a new guest player (shared across all games).
-
-**Response `data`:**
-
-```json
-{
-  "guestId": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-```bash
-curl -X POST http://localhost:3000/api/guest/init
-```
-
----
-
-### PATCH /api/guest/name
-
-Set or update a guest's display name (1–20 characters). Name appears on leaderboard entries.
-
-**Request:**
-
-```json
-{
-  "guestId": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "PlayerOne"
-}
-```
-
-**Response `data`:**
-
-```json
-{
-  "guestId": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "PlayerOne"
-}
-```
-
-```bash
-curl -X PATCH http://localhost:3000/api/guest/name \
-  -H "Content-Type: application/json" \
-  -d '{
-    "guestId": "YOUR_GUEST_ID",
-    "name": "PlayerOne"
-  }'
-```
-
----
-
-### POST /api/game/sync
-
-Batch sync offline game results. Idempotent by `replayHash` per game. Max 50 results per request.
-
-**Request:**
-
-```json
-{
-  "gameId": "puzzle-quest",
-  "guestId": "550e8400-e29b-41d4-a716-446655440000",
-  "results": [
-    {
-      "score": 1000,
-      "duration": 180,
-      "replayHash": "a3f2c1b9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
-      "metadata": { "level": 5, "powerUps": ["shield"] }
-    }
-  ]
-}
-```
-
-**Response `data`:**
-
-```json
-{
-  "accepted": 1,
-  "rejected": 0,
-  "bestScore": 1200
-}
-```
-
-**Replay hash (client-side):**
-
-Each game computes its own SHA-256 hash from game-specific replay data. The server only validates format and uniqueness — it does not recompute or verify the hash contents.
-
-```typescript
-import { createHash } from 'crypto';
-
-function computeReplayHash(replayData: unknown): string {
-  return createHash('sha256').update(JSON.stringify(replayData)).digest('hex');
-}
-```
-
-```bash
-curl -X POST http://localhost:3000/api/game/sync \
-  -H "Content-Type: application/json" \
-  -d '{
-    "gameId": "puzzle-quest",
-    "guestId": "YOUR_GUEST_ID",
-    "results": [{
-      "score": 1000,
-      "duration": 60,
-      "replayHash": "YOUR_64_CHAR_SHA256_HEX",
-      "metadata": { "level": 1 }
-    }]
-  }'
-```
-
----
-
-### GET /api/leaderboard/global?gameId=xxx
-
-**Query:** `gameId` (required), `limit` (default 100, max 100), `guestId` (optional, for `myRank`)
-
-**Response `data`:**
-
-```json
-{
-  "top": [
-    { "guestId": "...", "name": "PlayerOne", "score": 5000, "rank": 1 },
-    { "guestId": "...", "name": null, "score": 4800, "rank": 2 }
-  ],
-  "myRank": 123
-}
-```
-
-```bash
-curl "http://localhost:3000/api/leaderboard/global?gameId=puzzle-quest&guestId=YOUR_GUEST_ID&limit=100"
-```
 
 ## Anti-Cheat (Replay Hash Only)
 
@@ -267,6 +143,7 @@ No score validation, physics checks, seed validation, trust scoring, or server-s
 | Schedule | Job |
 |----------|-----|
 | Daily 03:00 | Rebuild Redis leaderboards from PostgreSQL per active game |
+| Every 10 minutes | Expire pending ad reward sessions past TTL |
 
 ## Redis Keys
 
@@ -277,9 +154,12 @@ No score validation, physics checks, seed validation, trust scoring, or server-s
 ## Database Models
 
 - **Game** — registered game with optional config JSON
-- **GuestPlayer** — anonymous player with optional display name (shared across games)
+- **GuestPlayer** — anonymous player with `sessionToken` and optional display name (shared across games)
 - **GameResult** — synced match scoped by `gameId`, unique `replayHash` per game
 - **Leaderboard** — all-time best score per guest per game
+- **AdConfig** — singleton runtime ads config override (`id = "default"`)
+- **AdRewardSession** — server-verified rewarded ad sessions (`PENDING` → `CLAIMED` / `EXPIRED`)
+- **AdEvent** — client and server ad analytics events
 
 ## Testing
 
@@ -311,4 +191,4 @@ npx prisma migrate deploy
 npm run start:prod
 ```
 
-Set `NODE_ENV=production` and configure production `DATABASE_URL` and `REDIS_URL`.
+Set `NODE_ENV=production` and configure production `DATABASE_URL`, `REDIS_URL`, and `ADS_ADMIN_API_KEY`.
