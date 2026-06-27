@@ -2,19 +2,44 @@
 
 Scalable, multi-game guest backend for mobile games. Built with NestJS, PostgreSQL, Prisma, and Redis.
 
+## What This API Does
+
+| Area | Responsibility |
+|------|----------------|
+| **Guest** | Create anonymous players and issue `sessionToken` for protected routes |
+| **Game sync** | Accept offline match results in batches and persist them per `gameId` |
+| **Leaderboard** | Serve paginated global rankings from Redis, with optional `myRank` |
+| **Anti-cheat** | Validate replay hashes (SHA-256) and reject duplicate replays from other guests |
+
+Ads, IAP, and in-game economy are handled on the client (`game-starter-kit`) — this API does not manage monetization.
+
 ## Features
 
-- **Multi-game support** — each game has its own leaderboard and Redis keys
+- **Multi-game support** — each game has its own leaderboard and Redis key
 - **Guest initialization** — anonymous players shared across games (no login)
 - **Guest session tokens** — `sessionToken` issued at init; protected routes use `Authorization: Bearer <token>`
 - **Guest display names** — optional display name per guest (shown on leaderboards)
-- **Offline game sync** — batch upload (up to 50 results) with idempotent replay handling
+- **Offline game sync** — batch upload (1–50 results) with idempotent replay handling
 - **Global leaderboard** — paginated top rankings + optional `myRank` via session token
 - **Replay-only anti-cheat** — SHA-256 replay hash validation and duplicate detection only
 - **Redis sorted sets** — fast ranking via `ZADD`, `ZREVRANGE`, `ZREVRANK`
 - **Rate limiting** — 100 requests per minute per IP (NestJS Throttler)
 - **Security** — Helmet headers, CORS, response compression
-- **Background jobs** — daily Redis leaderboard rebuild
+- **Background jobs** — daily Redis leaderboard rebuild from PostgreSQL
+
+## API Endpoints
+
+Base URL: `http://localhost:3000/api`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/` | Public | Health check (`Hello World!`) |
+| `POST` | `/guest/init` | Public | Create guest, return `guestId` + `sessionToken` |
+| `PATCH` | `/guest/name` | Bearer token | Update guest display name |
+| `POST` | `/game/sync` | Bearer token | Upload batch of game results |
+| `GET` | `/leaderboard/global` | Optional Bearer | Global leaderboard (`?gameId=&page=&limit=`) |
+
+Detailed request/response examples: [`documents/apis/`](documents/apis/)
 
 ## Tech Stack
 
@@ -39,9 +64,11 @@ npm run prisma:generate
 npm run start:dev
 ```
 
-API base URL: `http://localhost:3000/api`
+Health check:
 
-Health check: `GET http://localhost:3000/api`
+```bash
+curl http://localhost:3000/api
+```
 
 ## Environment Variables
 
@@ -69,14 +96,16 @@ src/
 ├── app.module.ts
 ├── main.ts                 # Bootstrap, global prefix, pipes, filters
 ├── common/
-│   ├── auth/               # Guest session guards (required + optional)
+│   ├── decorators/         # @CurrentGuest()
 │   ├── filters/            # HTTP exception filter
+│   ├── guards/             # GuestAuthGuard, OptionalGuestAuthGuard
 │   ├── interceptors/       # Standard response envelope
 │   ├── interfaces/
-│   └── validators/
+│   ├── utils/              # Bearer token extraction
+│   └── validators/         # Custom DTO validators
 ├── modules/
 │   ├── guest/              # Guest init + display name
-│   ├── game/               # Game sync + registry + repository
+│   ├── game/               # Game sync, registry, repository
 │   ├── replay/             # Replay hash validation (anti-cheat)
 │   ├── leaderboard/        # Global rankings + daily maintenance cron
 │   ├── redis/              # Redis sorted set service
@@ -103,6 +132,23 @@ Authorization: Bearer <sessionToken>
 
 `guestId` is resolved from the token on the server — do not send it in request bodies for protected routes.
 
+## Response Format
+
+All success responses are wrapped by `ResponseInterceptor`:
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Data retrieved successfully",
+  "data": { },
+  "path": "/api/guest/init",
+  "timestamp": "2026-06-27T01:00:00.000Z"
+}
+```
+
+Errors are formatted by `HttpExceptionFilter` with `success: false` and a structured `message`.
+
 ## Adding a New Game
 
 Insert a row into the `games` table — no code changes required:
@@ -112,9 +158,46 @@ INSERT INTO games (id, name, "isActive")
 VALUES ('my-new-game', 'My New Game', true);
 ```
 
-The core sync and leaderboard logic automatically applies to the new `gameId`.
+The sync and leaderboard logic automatically applies to the new `gameId`. The client must send this `gameId` in sync and leaderboard requests.
 
 Default seeded games: `puzzle-quest`, `arcade-rush`.
+
+## Game Sync
+
+`POST /api/game/sync` accepts:
+
+```json
+{
+  "gameId": "puzzle-quest",
+  "results": [
+    {
+      "score": 1200,
+      "duration": 45,
+      "replayHash": "<64-char SHA-256 hex>",
+      "metadata": { "level": 3 }
+    }
+  ]
+}
+```
+
+Constraints:
+
+- `results`: 1–50 items per request
+- `score`, `duration`: non-negative integers
+- `replayHash`: required, 64-character SHA-256 hex string
+- `metadata`: optional JSON object (string/number/boolean/null values)
+
+Response:
+
+```json
+{
+  "accepted": 1,
+  "rejected": 0,
+  "bestScore": 1200
+}
+```
+
+On accept, the API persists `GameResult`, upserts `Leaderboard` (keeps highest score), and updates Redis in real time.
 
 ## Anti-Cheat (Replay Hash Only)
 
@@ -129,11 +212,21 @@ The `ReplayService` validates **only** replay hashes:
 
 No score validation, physics checks, seed validation, trust scoring, or server-side replay simulation.
 
+## Leaderboard
+
+`GET /api/leaderboard/global?gameId=puzzle-quest&page=1&limit=100`
+
+- `page`: minimum 1 (default `1`)
+- `limit`: 1–100 (default `100`)
+- Returns `top` (ranked entries with guest names), `pagination`, and `myRank` when a valid Bearer token is provided
+
 ## Background Jobs
 
 | Schedule | Job |
 |----------|-----|
 | Daily 03:00 | Rebuild Redis leaderboards from PostgreSQL per active game |
+
+See: [`documents/tasks/leaderboard-maintenance.md`](documents/tasks/leaderboard-maintenance.md)
 
 ## Redis Keys
 
@@ -143,10 +236,24 @@ No score validation, physics checks, seed validation, trust scoring, or server-s
 
 ## Database Models
 
-- **Game** — registered game with optional config JSON
-- **GuestPlayer** — anonymous player with `sessionToken` and optional display name (shared across games)
-- **GameResult** — synced match scoped by `gameId`, unique `replayHash` per game
-- **Leaderboard** — all-time best score per guest per game
+| Model | Purpose |
+|-------|---------|
+| **Game** | Registered game with optional config JSON and `isActive` flag |
+| **GuestPlayer** | Anonymous player with `sessionToken` and optional display name (shared across games) |
+| **GameResult** | Synced match scoped by `gameId`; unique `replayHash` per game |
+| **Leaderboard** | All-time best score per guest per game |
+
+## API Documentation
+
+| Topic | Document |
+|-------|----------|
+| Health check | [`documents/apis/health/health-check.md`](documents/apis/health/health-check.md) |
+| Init guest | [`documents/apis/guest/init-guest.md`](documents/apis/guest/init-guest.md) |
+| Update guest name | [`documents/apis/guest/update-guest-name.md`](documents/apis/guest/update-guest-name.md) |
+| Sync game results | [`documents/apis/game/sync-game-results.md`](documents/apis/game/sync-game-results.md) |
+| Global leaderboard | [`documents/apis/leaderboard/global-leaderboard.md`](documents/apis/leaderboard/global-leaderboard.md) |
+| Leaderboard cron | [`documents/tasks/leaderboard-maintenance.md`](documents/tasks/leaderboard-maintenance.md) |
+| Docker setup | [`documents/setup/docker.md`](documents/setup/docker.md) |
 
 ## Testing
 
