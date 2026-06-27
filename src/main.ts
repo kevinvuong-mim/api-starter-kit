@@ -3,6 +3,7 @@ import compression from 'compression';
 import { AppModule } from '@/app.module';
 import { NestFactory } from '@nestjs/core';
 import { HttpExceptionFilter } from '@/common/filters';
+import { APP_CONFIG } from '@/common/config/app.config';
 import { ResponseInterceptor } from '@/common/interceptors';
 import { LoggingInterceptor } from '@/common/interceptors/logging.interceptor';
 import { requestIdMiddleware } from '@/common/middleware/request-id.middleware';
@@ -26,6 +27,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
+    origin: APP_CONFIG.corsOrigins,
     allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
     methods: ['GET', 'PUT', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });

@@ -49,7 +49,6 @@ Authorization: Bearer <sessionToken>
   "data": {
     "guestId": "550e8400-e29b-41d4-a716-446655440000",
     "name": "PlayerOne",
-    "installId": "660e8400-e29b-41d4-a716-446655440001",
     "sessionTokenExpiresAt": "2026-09-25T12:00:00.000Z"
   },
   "timestamp": "2026-06-27T12:00:00.000Z",
@@ -61,8 +60,7 @@ Authorization: Bearer <sessionToken>
 
 - **400 Bad Request**: Validation error
 - **401 Unauthorized**: Thiếu, sai, hoặc **hết hạn** session token
-- **404 Not Found**: Guest không tồn tại
-- **429 Too Many Requests**: Vượt quá rate limit
+- **429 Too Many Requests**: Vượt rate limit global
 
 #### cURL Example
 
@@ -79,7 +77,7 @@ curl -X PATCH http://localhost:3000/api/guest/name \
 
 1. `GuestAuthGuard` resolve guest từ token.
 2. `GuestRepository.updateName()` ghi đè tên trong `guest_players`.
-3. Trả về profile đầy đủ (gồm `installId`, `sessionTokenExpiresAt`).
+3. Trả về profile gồm `guestId`, `name`, `sessionTokenExpiresAt`.
 
 ---
 

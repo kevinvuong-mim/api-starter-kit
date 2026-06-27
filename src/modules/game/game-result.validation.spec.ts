@@ -73,6 +73,11 @@ describe('game-result.validation', () => {
     });
   });
 
+  it('accepts playedAt values inside the 30-day offline sync window', () => {
+    const offlinePlay = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString();
+    expect(validatePlayedAt(offlinePlay, config)).toEqual({ valid: true });
+  });
+
   it('accepts idempotent duplicate for same guest', () => {
     const runSeed = 'run-dup';
     const score = 500;

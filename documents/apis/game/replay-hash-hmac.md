@@ -16,7 +16,7 @@ Mỗi game có `replaySecret` trong `games.config`. Client dùng secret này (ob
 {
   "maxScore": 50000,
   "replaySecret": "your-per-game-secret",
-  "playedAtMaxAgeDays": 7,
+  "playedAtMaxAgeDays": 30,
   "playedAtFutureSkewMs": 300000
 }
 ```
@@ -25,7 +25,7 @@ Mỗi game có `replaySecret` trong `games.config`. Client dùng secret này (ob
 |-------|---------|-------------|
 | `maxScore` | `100000` | Điểm tối đa hợp lệ |
 | `replaySecret` | — | Bắt buộc cho production; nếu thiếu, server chỉ validate format hash |
-| `playedAtMaxAgeDays` | `7` | Tuổi tối đa của `playedAt` |
+| `playedAtMaxAgeDays` | `30` | Tuổi tối đa của `playedAt` |
 | `playedAtFutureSkewMs` | `300000` (5 phút) | Cho phép clock skew về tương lai |
 
 Seed dev:
@@ -109,8 +109,12 @@ export function computeReplayHash(
 |--------|-------|
 | `MISSING_RUN_SEED` | Thiếu `metadata.runSeed` khi game có `replaySecret` |
 | `INVALID_REPLAY_SIGNATURE` | HMAC không khớp |
+| `MISSING_REPLAY_HASH` | `replayHash` rỗng |
 | `INVALID_REPLAY_HASH_FORMAT` | Không phải 64-char hex |
 | `SCORE_EXCEEDS_MAX` | Vượt `maxScore` |
+| `SCORE_MISMATCH` | Cùng guest retry cùng hash nhưng score khác |
+| `DUPLICATE_REPLAY` | Hash đã thuộc guest khác |
+| `INVALID_PLAYED_AT` | `playedAt` không parse được |
 | `PLAYED_AT_IN_FUTURE` | `playedAt` quá xa tương lai |
 | `PLAYED_AT_TOO_OLD` | `playedAt` quá cũ |
 

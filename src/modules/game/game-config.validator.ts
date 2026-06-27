@@ -1,11 +1,13 @@
 import { Prisma } from '@prisma/client';
 
 export const DEFAULT_MAX_SCORE = 100_000;
-export const DEFAULT_PLAYED_AT_MAX_AGE_DAYS = 7;
+export const DEFAULT_PLAYED_AT_MAX_AGE_DAYS = 30;
 export const DEFAULT_PLAYED_AT_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 export interface ParsedGameConfig {
   maxScore: number;
+  minDurationMs?: number;
+  maxScorePerMinute?: number;
   replaySecret?: string;
   playedAtMaxAgeDays: number;
   playedAtFutureSkewMs: number;
@@ -22,6 +24,8 @@ export function parseGameConfig(config: Prisma.JsonValue): ParsedGameConfig {
 
   const record = config as Record<string, unknown>;
   const rawMaxScore = record.maxScore;
+  const rawMinDurationMs = record.minDurationMs;
+  const rawMaxScorePerMinute = record.maxScorePerMinute;
   const rawReplaySecret = record.replaySecret;
   const rawPlayedAtMaxAgeDays = record.playedAtMaxAgeDays;
   const rawPlayedAtFutureSkewMs = record.playedAtFutureSkewMs;
@@ -51,6 +55,18 @@ export function parseGameConfig(config: Prisma.JsonValue): ParsedGameConfig {
 
   return {
     maxScore,
+    minDurationMs:
+      typeof rawMinDurationMs === 'number' &&
+      Number.isFinite(rawMinDurationMs) &&
+      rawMinDurationMs > 0
+        ? Math.floor(rawMinDurationMs)
+        : undefined,
+    maxScorePerMinute:
+      typeof rawMaxScorePerMinute === 'number' &&
+      Number.isFinite(rawMaxScorePerMinute) &&
+      rawMaxScorePerMinute > 0
+        ? Math.floor(rawMaxScorePerMinute)
+        : undefined,
     playedAtMaxAgeDays,
     playedAtFutureSkewMs,
     replaySecret:

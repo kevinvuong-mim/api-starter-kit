@@ -43,8 +43,10 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 | results              | array  | Yes      | Min: 1, Max: 50 items                   |
 | results[].score      | number | Yes      | Integer, Min: 0, ≤ `game.config.maxScore` |
 | results[].replayHash | string | Yes      | HMAC-SHA256 hex (64 chars)              |
-| results[].playedAt   | string | No       | ISO 8601; skew max 5 min future, 7 days past |
-| results[].metadata   | object | No       | Phải có `runSeed` khi game có `replaySecret` |
+| results[].playedAt   | string | No       | ISO 8601 strict; skew max 5 phút tương lai, mặc định tối đa 30 ngày quá khứ |
+| results[].metadata   | object | No       | Flat object; tối đa 10 keys, 2048 bytes; value là string/number/boolean/null |
+
+`metadata.runSeed` là bắt buộc khi game có `config.replaySecret`.
 
 #### Response
 
@@ -53,6 +55,8 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 ```json
 {
   "success": true,
+  "statusCode": 201,
+  "message": "Resource created successfully",
   "data": {
     "results": [
       {
@@ -68,7 +72,9 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
     "accepted": 1,
     "rejected": 1,
     "bestScore": 1500
-  }
+  },
+  "timestamp": "2026-06-27T12:00:00.000Z",
+  "path": "/api/games/puzzle-quest/results"
 }
 ```
 
@@ -81,10 +87,18 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 | `SCORE_EXCEEDS_MAX` | Vượt `maxScore` |
 | `INVALID_REPLAY_SIGNATURE` | HMAC không khớp |
 | `MISSING_RUN_SEED` | Thiếu `metadata.runSeed` |
+| `MISSING_REPLAY_HASH` | `replayHash` rỗng |
 | `INVALID_REPLAY_HASH_FORMAT` | Format hash sai |
 | `INVALID_PLAYED_AT` | `playedAt` không parse được |
 | `PLAYED_AT_IN_FUTURE` | `playedAt` quá xa tương lai |
 | `PLAYED_AT_TOO_OLD` | `playedAt` quá cũ |
+
+**Request-level Error Responses**
+
+- **400 Bad Request**: DTO validation lỗi (`results` không phải array, batch rỗng/quá 50 items, `score` không phải integer, metadata sai format, ...) hoặc `gameId` tồn tại nhưng `isActive=false`
+- **401 Unauthorized**: Thiếu, sai, hoặc hết hạn session token
+- **404 Not Found**: `gameId` không tồn tại
+- **429 Too Many Requests**: Vượt rate limit theo IP hoặc theo guest
 
 ---
 
@@ -95,7 +109,7 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 3. Validate từng result (HMAC, maxScore, playedAt, duplicate).
 4. Transaction: `INSERT ... ON CONFLICT DO NOTHING RETURNING` trên `game_replay_keys` → insert `game_results` chỉ cho rows mới.
 5. Upsert `leaderboard` (`GREATEST`).
-6. Update Redis với encoded tie-break score.
+6. Update Redis với authoritative `bestScore` sau khi đọc lại từ PostgreSQL.
 7. Trả `results[]` theo **thứ tự input** + aggregates.
 
 ---
@@ -106,6 +120,14 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 |------|----------|--------------|
 | puzzle-quest | 50000 | puzzle-quest-dev-secret |
 | arcade-rush | 100000 | arcade-rush-dev-secret |
+
+Code default khi `games.config` thiếu field:
+
+| Field | Default |
+|-------|---------|
+| `maxScore` | `100000` |
+| `playedAtMaxAgeDays` | `30` |
+| `playedAtFutureSkewMs` | `300000` |
 
 ```sql
 UPDATE games SET config = '{"maxScore": 50000, "replaySecret": "your-secret"}'::jsonb

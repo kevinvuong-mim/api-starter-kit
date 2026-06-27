@@ -2,7 +2,7 @@
 
 ## Overview
 
-API lấy bảng xếp hạng all-time theo game. Ranking đọc từ Redis sorted set; nếu Redis trống thì **fallback PostgreSQL** và tự warm lại cache. Tên guest resolve từ database. Hỗ trợ pagination và `myRank` qua optional Bearer token.
+API lấy bảng xếp hạng all-time theo game. Ranking ưu tiên Redis sorted set, nhưng chỉ tin Redis khi số lượng entry khớp PostgreSQL; nếu Redis trống hoặc drift thì rebuild từ PostgreSQL rồi trả kết quả. Tên guest resolve từ database. Hỗ trợ pagination và `myRank` qua optional Bearer token.
 
 **Base URL**: `/api/leaderboards`
 
@@ -96,8 +96,9 @@ curl "http://localhost:3000/api/leaderboards?gameId=puzzle-quest&page=2&limit=50
 
 1. `GameRegistryService.assertActiveGame(gameId)`.
 2. `LeaderboardCacheService.getRankings()`:
-   - Redis có data → đọc `ZREVRANGE` + `ZCARD`.
-   - Redis trống → đọc bảng `leaderboard` (PostgreSQL), warm lại Redis.
+   - Redis có data và `ZCARD` khớp count PostgreSQL → đọc `ZREVRANGE`.
+   - Redis trống hoặc count lệch PostgreSQL → rebuild Redis từ bảng `leaderboard`, rồi đọc lại từ Redis.
+   - PostgreSQL không có entry → trả leaderboard rỗng và xóa Redis key nếu cần.
 3. Batch resolve guest names từ `guest_players`.
 4. Resolve `myRank` nếu có guest từ token.
 
@@ -130,7 +131,7 @@ curl "http://localhost:3000/api/leaderboards?gameId=puzzle-quest&page=2&limit=50
 
 **Cause**: Redis restart trước khi có warm; chưa ai sync.
 
-**Solution**: Gọi lại API (tự fallback PG + warm); hoặc đợi app restart / cron 03:00.
+**Solution**: Gọi lại API để service rebuild Redis từ PostgreSQL; hoặc đợi app restart / cron 03:00.
 
 ### Problem: `myRank` null
 
@@ -145,4 +146,4 @@ curl "http://localhost:3000/api/leaderboards?gameId=puzzle-quest&page=2&limit=50
 - Read-only endpoint
 - Max `limit`: 100
 - Redis key: `lb:global:{gameId}`
-- Tie score: Redis sort lexicographic theo `guestId`
+- Tie score: score cao hơn đứng trước; nếu bằng score thì `guestId` nhỏ hơn đứng trước (được encode vào Redis ZSET score)

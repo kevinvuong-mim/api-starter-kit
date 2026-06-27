@@ -22,7 +22,7 @@ Ads, IAP, and in-game economy are handled on the client (`game-starter-kit`) —
 - **Secure guest recovery** — `installId` + `installSecret` pair (secret returned once at creation)
 - **Offline game sync** — batch upload (1–50 results) with per-item status + idempotent replay handling
 - **Global leaderboard** — paginated top rankings + optional `myRank` via session token
-- **HMAC anti-cheat** — per-game `replaySecret`; client signs `replayHash` with `runSeed` (see [replay-hash-hmac.md](documents/apis/game/replay-hash-hmac.md))
+- **Replay hash validation** — per-game `replaySecret`; client signs `replayHash` with `runSeed` for idempotency and lightweight tamper detection (see [replay-hash-hmac.md](documents/apis/game/replay-hash-hmac.md))
 - **Redis sorted sets** — fast ranking with consistent PG tie-break encoding
 - **Tiered rate limiting** — IP: 100/min default, 10/min init, 30/min sync; per-guest 30/min sync (Redis)
 - **Security** — Helmet headers, CORS, response compression
@@ -157,11 +157,20 @@ Errors are formatted by `HttpExceptionFilter` with `success: false` and a struct
 
 ## Adding a New Game
 
-Insert a row into the `games` table — no code changes required:
+Insert a row into the `games` table. The `id`, `maxScore`, and `replaySecret` must match the client game config:
 
 ```sql
-INSERT INTO games (id, name, "isActive")
-VALUES ('my-new-game', 'My New Game', true);
+INSERT INTO games (id, name, "isActive", config)
+VALUES (
+  'my-new-game',
+  'My New Game',
+  true,
+  '{
+    "maxScore": 50000,
+    "replaySecret": "replace-with-per-game-secret",
+    "playedAtMaxAgeDays": 30
+  }'::jsonb
+);
 ```
 
 The sync and leaderboard logic automatically applies to the new `gameId`. The client must send this `gameId` in sync and leaderboard requests.

@@ -47,13 +47,14 @@ Content-Type: application/json
 
 | Field         | Type   | Required | Validation        | Description                                      |
 | ------------- | ------ | -------- | ----------------- | ------------------------------------------------ |
-| installId     | string | No       | UUID v4 (36 ký tự) | ID cài đặt do client generate và persist locally |
-| installSecret | string | Relink   | UUID v4           | Secret server trả về lúc tạo guest; bắt buộc khi re-link |
+| installId     | string | No       | UUID (36 ký tự) | ID cài đặt do client generate và persist locally |
+| installSecret | string | Relink   | UUID (36 ký tự) | Secret server trả về lúc tạo guest; bắt buộc khi re-link |
 
 - Không gửi body hoặc `{}` → tạo guest **mới** (không gắn `installId`, không relink được).
 - Gửi `installId` mới → tạo guest + trả `installSecret` **một lần**.
 - Gửi `installId` đã tồn tại + `installSecret` đúng → **re-link**, rotate `sessionToken`.
 - Gửi `installId` đã tồn tại **không có** `installSecret` → **401 Unauthorized**.
+- `installSecret` chỉ có ý nghĩa khi gửi kèm `installId`.
 
 #### Response
 
@@ -84,11 +85,12 @@ Content-Type: application/json
 | data.sessionToken          | string  | Token dùng cho `Authorization: Bearer <token>`               |
 | data.sessionTokenExpiresAt | string  | Thời điểm hết hạn token (ISO 8601)                         |
 | data.relinked              | boolean | `true` nếu re-link; `false` nếu guest mới                   |
-| data.installSecret         | string  | Chỉ trả về lúc **tạo mới** với `installId` — lưu Keychain/Keystore |
+| data.installSecret         | string  | Chỉ trả về lúc **tạo mới** với `installId`; không trả về khi re-link |
 
 **Important Notes**:
 
-- `sessionToken` và `installSecret` chỉ trả về **một lần** — server lưu hash, không lưu plaintext.
+- `installSecret` chỉ trả về **một lần** khi tạo guest với `installId`; server lưu hash, không lưu plaintext.
+- `sessionToken` được trả về khi tạo mới hoặc re-link; server chỉ lưu hash.
 - Token mặc định có hiệu lực **90 ngày** (`SESSION_TOKEN_TTL_DAYS`).
 - `installId` + `installSecret` phải persist riêng session token.
 

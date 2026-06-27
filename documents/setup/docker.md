@@ -11,26 +11,46 @@ Tài liệu hướng dẫn chạy PostgreSQL và Redis bằng Docker cho dự á
 File `docker-compose.yml` ở thư mục gốc:
 
 ```yaml
+version: '3.8'
+
 services:
   postgres:
+    ports:
+      - '5432:5432'
+    restart: unless-stopped
     image: postgres:16-alpine
     container_name: game-postgres
     environment:
       POSTGRES_DB: game
       POSTGRES_USER: game_user
       POSTGRES_PASSWORD: change_me
-    ports:
-      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
+      retries: 5
+      timeout: 5s
+      interval: 10s
       test: ['CMD-SHELL', 'pg_isready -U game_user -d game']
 
   redis:
-    image: redis:8.6-alpine
-    container_name: game-redis
     ports:
       - '6379:6379'
+    restart: unless-stopped
+    image: redis:8.6-alpine
+    container_name: game-redis
+    volumes:
+      - redis_data:/data
     healthcheck:
+      retries: 5
+      timeout: 5s
+      interval: 10s
       test: ['CMD', 'redis-cli', 'ping']
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
 ```
 
 ### Thông tin kết nối (development)

@@ -12,6 +12,7 @@ import { GuestModule } from '@/modules/guest/guest.module';
 import { RedisModule } from '@/modules/redis/redis.module';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
 import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
+import { RedisThrottlerStorageService } from '@/modules/redis/redis-throttler-storage.service';
 
 @Module({
   controllers: [AppController],
@@ -30,12 +31,19 @@ import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
     PrismaModule,
     LeaderboardModule,
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 100,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [RedisThrottlerStorageService],
+      useFactory: (storage: RedisThrottlerStorageService) => ({
+        storage,
+        throttlers: [
+          {
+            ttl: 60000,
+            limit: 100,
+          },
+        ],
+      }),
+    }),
     ConfigModule.forRoot({ isGlobal: true }),
   ],
 })

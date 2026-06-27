@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { GameRepository } from '@/modules/game/game.repository';
 import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';
@@ -12,6 +12,8 @@ import {
 
 @Injectable()
 export class GameService {
+  private readonly logger = new Logger(GameService.name);
+
   constructor(
     private readonly gameRepository: GameRepository,
     private readonly gameRegistryService: GameRegistryService,
@@ -104,6 +106,20 @@ export class GameService {
     const rejected = itemResponses.filter((item) => item.status === 'rejected').length;
     const bestScore = await this.gameRepository.getBestScoreForGuest(gameId, guestId);
 
+    if (rejected > 0) {
+      this.logger.warn('Rejected game result sync items', {
+        gameId,
+        guestId,
+        accepted,
+        rejected,
+        reasons: itemResponses
+          .filter((item) => item.status === 'rejected')
+          .map((item) => item.reason),
+      });
+    }
+
+    this.logAcceptedResultAnomalies(gameId, guestId, results, itemResponses, config);
+
     // Push the guest's authoritative best score (post-GREATEST in PG) to Redis exactly once.
     // The Lua script only raises an existing score, so this stays consistent even on retries.
     if (hasInserted && bestScore > 0) {
@@ -136,5 +152,55 @@ export class GameService {
       status: 'rejected',
       reason: ResultRejectionReason.DUPLICATE_REPLAY,
     };
+  }
+
+  private logAcceptedResultAnomalies(
+    gameId: string,
+    guestId: string,
+    results: GameResultDto[],
+    itemResponses: SyncGameResultItemResponseDto[],
+    config: ReturnType<GameRegistryService['getConfig']>,
+  ): void {
+    if (!config.minDurationMs && !config.maxScorePerMinute) {
+      return;
+    }
+
+    for (let index = 0; index < results.length; index += 1) {
+      if (itemResponses[index]?.status !== 'accepted') {
+        continue;
+      }
+
+      const result = results[index];
+      const durationSeconds =
+        typeof result.metadata?.duration === 'number' && Number.isFinite(result.metadata.duration)
+          ? result.metadata.duration
+          : undefined;
+      const reasons: string[] = [];
+
+      if (
+        config.minDurationMs &&
+        durationSeconds &&
+        durationSeconds * 1000 < config.minDurationMs
+      ) {
+        reasons.push('MIN_DURATION');
+      }
+
+      if (config.maxScorePerMinute && durationSeconds && durationSeconds > 0) {
+        const scorePerMinute = (result.score / durationSeconds) * 60;
+        if (scorePerMinute > config.maxScorePerMinute) {
+          reasons.push('SCORE_RATE');
+        }
+      }
+
+      if (reasons.length > 0) {
+        this.logger.warn('Accepted result matched anomaly policy', {
+          gameId,
+          guestId,
+          score: result.score,
+          replayHash: result.replayHash,
+          reasons,
+        });
+      }
+    }
   }
 }

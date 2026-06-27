@@ -56,6 +56,8 @@ Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và 
 
 **Service:** `GameResultsPartitionService`
 
+**Detailed doc:** [Game Results Partition Maintenance](./game-results-partition-maintenance.md)
+
 **Purpose:**
 
 - Tạo partition tháng hiện tại + 2 tháng tới cho `game_results`.
@@ -74,8 +76,10 @@ Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và 
 
 `GET /api/leaderboards` qua `LeaderboardCacheService.getRankings()`:
 
-1. Redis có data → trả từ Redis.
-2. Redis trống → fallback PostgreSQL + warm lại Redis.
+1. Đọc `ZCARD` từ Redis và count từ PostgreSQL.
+2. Redis có data và count khớp PostgreSQL → trả từ Redis.
+3. Redis trống hoặc count lệch PostgreSQL → rebuild Redis từ PostgreSQL, rồi trả từ Redis.
+4. PostgreSQL không có entry → trả rỗng; nếu Redis còn data cũ thì clear key.
 
 ---
 
@@ -92,6 +96,7 @@ Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và 
 
 ## Related Documentation
 
+- [Game Results Partition Maintenance](./game-results-partition-maintenance.md)
 - [Leaderboard API](../apis/leaderboard/global-leaderboard.md)
 - [Sync Game Results API](../apis/game/sync-game-results.md)
 - [Environment Variables](../setup/environment-variables.md)
