@@ -3,7 +3,7 @@ import { GuestPlayer } from '@prisma/client';
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 
 import { GuestService } from '@/modules/guest/guest.service';
-import { extractBearerToken } from '@/common/auth/extract-bearer-token';
+import { extractBearerToken } from '@/common/utils/extract-bearer-token';
 
 type GuestRequest = Request & { guest?: GuestPlayer };
 

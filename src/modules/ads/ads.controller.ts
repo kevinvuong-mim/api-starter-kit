@@ -1,10 +1,10 @@
 import { Get, Body, Post, Patch, Headers, UseGuards, Controller } from '@nestjs/common';
 
 import { AdsService } from '@/modules/ads/ads.service';
-import { GuestAuthGuard } from '@/common/auth/guest-auth.guard';
+import { GuestAuthGuard } from '@/common/guards/guest-auth.guard';
 import { ClaimRewardDto } from '@/modules/ads/dto/claim-reward.dto';
 import { StartRewardDto } from '@/modules/ads/dto/start-reward.dto';
-import { CurrentGuest } from '@/common/auth/current-guest.decorator';
+import { CurrentGuest } from '@/common/decorators/current-guest.decorator';
 import { UpdateAdsConfigDto } from '@/modules/ads/dto/update-ads-config.dto';
 import { AdsConfigResponseDto } from '@/modules/ads/dto/ads-config-response.dto';
 import { AdsMetricsResponseDto } from '@/modules/ads/dto/ads-metrics-response.dto';
