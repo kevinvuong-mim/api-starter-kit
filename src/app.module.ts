@@ -6,7 +6,6 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AppService } from '@/app.service';
 import { AppController } from '@/app.controller';
-import { AdsModule } from '@/modules/ads/ads.module';
 import { GameModule } from '@/modules/game/game.module';
 import { GuestModule } from '@/modules/guest/guest.module';
 import { RedisModule } from '@/modules/redis/redis.module';
@@ -24,7 +23,6 @@ import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
     },
   ],
   imports: [
-    AdsModule,
     GameModule,
     GuestModule,
     RedisModule,

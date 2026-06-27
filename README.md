@@ -1,6 +1,6 @@
 # Multi-Game API
 
-Scalable, multi-game guest backend for mobile games, with server-verified ads monetization. Built with NestJS, PostgreSQL, Prisma, and Redis.
+Scalable, multi-game guest backend for mobile games. Built with NestJS, PostgreSQL, Prisma, and Redis.
 
 ## Features
 
@@ -12,10 +12,9 @@ Scalable, multi-game guest backend for mobile games, with server-verified ads mo
 - **Global leaderboard** — paginated top rankings + optional `myRank` via session token
 - **Replay-only anti-cheat** — SHA-256 replay hash validation and duplicate detection only
 - **Redis sorted sets** — fast ranking via `ZADD`, `ZREVRANGE`, `ZREVRANK`
-- **Ads monetization** — remote config, rewarded ad sessions (start/claim), client event logging, admin metrics
 - **Rate limiting** — 100 requests per minute per IP (NestJS Throttler)
 - **Security** — Helmet headers, CORS, response compression
-- **Background jobs** — daily Redis leaderboard rebuild; pending ad reward session expiry
+- **Background jobs** — daily Redis leaderboard rebuild
 
 ## Tech Stack
 
@@ -51,10 +50,6 @@ DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
 REDIS_URL="redis://localhost:6379"
 PORT=3000
 NODE_ENV="development"
-
-# Ads monetization
-ADS_ADMIN_API_KEY="random-api-key"
-ADS_REWARD_SESSION_TTL_SECONDS=300
 ```
 
 | Variable | Description |
@@ -63,8 +58,6 @@ ADS_REWARD_SESSION_TTL_SECONDS=300
 | `REDIS_URL` | Redis connection string |
 | `PORT` | HTTP port (default `3000`) |
 | `NODE_ENV` | `development` or `production` |
-| `ADS_ADMIN_API_KEY` | Secret key for admin ads endpoints (`x-ads-admin-key` header) |
-| `ADS_REWARD_SESSION_TTL_SECONDS` | Reward session expiry in seconds (default `300`) |
 
 See also: [`documents/setup/environment-variables.md`](documents/setup/environment-variables.md)
 
@@ -82,7 +75,6 @@ src/
 │   ├── interfaces/
 │   └── validators/
 ├── modules/
-│   ├── ads/                # Ads config, rewards, events, admin metrics
 │   ├── guest/              # Guest init + display name
 │   ├── game/               # Game sync + registry + repository
 │   ├── replay/             # Replay hash validation (anti-cheat)
@@ -105,10 +97,9 @@ Authorization: Bearer <sessionToken>
 
 | Auth type | Routes |
 |-----------|--------|
-| Public | `GET /api`, `POST /api/guest/init`, `GET /api/ads/config` |
-| Required (`GuestAuthGuard`) | `PATCH /api/guest/name`, `POST /api/game/sync`, ads reward/events |
+| Public | `GET /api`, `POST /api/guest/init` |
+| Required (`GuestAuthGuard`) | `PATCH /api/guest/name`, `POST /api/game/sync` |
 | Optional (`OptionalGuestAuthGuard`) | `GET /api/leaderboard/global` (for `myRank`) |
-| Admin key (`x-ads-admin-key`) | `GET/PATCH /api/ads/admin/*` |
 
 `guestId` is resolved from the token on the server — do not send it in request bodies for protected routes.
 
@@ -143,7 +134,6 @@ No score validation, physics checks, seed validation, trust scoring, or server-s
 | Schedule | Job |
 |----------|-----|
 | Daily 03:00 | Rebuild Redis leaderboards from PostgreSQL per active game |
-| Every 10 minutes | Expire pending ad reward sessions past TTL |
 
 ## Redis Keys
 
@@ -157,9 +147,6 @@ No score validation, physics checks, seed validation, trust scoring, or server-s
 - **GuestPlayer** — anonymous player with `sessionToken` and optional display name (shared across games)
 - **GameResult** — synced match scoped by `gameId`, unique `replayHash` per game
 - **Leaderboard** — all-time best score per guest per game
-- **AdConfig** — singleton runtime ads config override (`id = "default"`)
-- **AdRewardSession** — server-verified rewarded ad sessions (`PENDING` → `CLAIMED` / `EXPIRED`)
-- **AdEvent** — client and server ad analytics events
 
 ## Testing
 
@@ -191,4 +178,4 @@ npx prisma migrate deploy
 npm run start:prod
 ```
 
-Set `NODE_ENV=production` and configure production `DATABASE_URL`, `REDIS_URL`, and `ADS_ADMIN_API_KEY`.
+Set `NODE_ENV=production` and configure production `DATABASE_URL` and `REDIS_URL`.
