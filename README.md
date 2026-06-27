@@ -172,7 +172,6 @@ Default seeded games: `puzzle-quest`, `arcade-rush`.
   "results": [
     {
       "score": 1200,
-      "duration": 45,
       "replayHash": "<64-char SHA-256 hex>",
       "metadata": { "level": 3 }
     }
@@ -183,7 +182,7 @@ Default seeded games: `puzzle-quest`, `arcade-rush`.
 Constraints:
 
 - `results`: 1–50 items per request
-- `score`, `duration`: non-negative integers
+- `score`: non-negative integer
 - `replayHash`: required, 64-character SHA-256 hex string
 - `metadata`: optional JSON object (string/number/boolean/null values)
 

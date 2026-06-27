@@ -37,7 +37,6 @@ model GameResult {
   gameId     String
   guestId    String
   score      Int
-  duration   Int
   replayHash String
   metadata   Json?
   createdAt  DateTime @default(now())

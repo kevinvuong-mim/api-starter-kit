@@ -35,7 +35,6 @@ Authorization: Bearer <sessionToken>
   "results": [
     {
       "score": 1000,
-      "duration": 180,
       "replayHash": "a3f2c1b9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
       "metadata": { "level": 5, "powerUps": "shield" }
     }
@@ -50,7 +49,6 @@ Authorization: Bearer <sessionToken>
 | gameId               | string | Yes      | Game phải tồn tại và `isActive = true`  | ID của game                          |
 | results              | array  | Yes      | Min: 1, Max: 50 items                   | Danh sách kết quả cần sync           |
 | results[].score      | number | Yes      | Integer, Min: 0                         | Điểm số của lượt chơi                |
-| results[].duration   | number | Yes      | Integer, Min: 0                         | Thời gian chơi (giây)                |
 | results[].replayHash | string | Yes      | 64-char SHA-256 hex string              | Hash replay để chống gian lận        |
 | results[].metadata   | object | No       | Flat JSON, xem [Metadata Rules](#metadata-rules) | Dữ liệu bổ sung theo từng game |
 
@@ -168,7 +166,6 @@ curl -X POST http://localhost:3000/api/game/sync \
     "gameId": "puzzle-quest",
     "results": [{
       "score": 1000,
-      "duration": 60,
       "replayHash": "a3f2c1b9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
       "metadata": { "level": 1 }
     }]

@@ -37,7 +37,6 @@ export class GameRepository {
           gameId,
           guestId,
           score: input.score,
-          duration: input.duration,
           replayHash: input.replayHash,
           metadata: input.metadata as Prisma.InputJsonValue | undefined,
         })),
