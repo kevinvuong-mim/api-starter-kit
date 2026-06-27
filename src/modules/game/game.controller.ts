@@ -1,8 +1,8 @@
 import { Post, Body, Controller, UseGuards } from '@nestjs/common';
 
 import { GameService } from '@/modules/game/game.service';
-import { GuestAuthGuard } from '@/common/auth/guest-auth.guard';
-import { CurrentGuest } from '@/common/auth/current-guest.decorator';
+import { GuestAuthGuard } from '@/common/guards/guest-auth.guard';
+import { CurrentGuest } from '@/common/decorators/current-guest.decorator';
 import { SyncGameResultsDto } from '@/modules/game/dto/sync-game-results.dto';
 import { SyncGameResultsResponseDto } from '@/modules/game/dto/sync-game-results-response.dto';
 

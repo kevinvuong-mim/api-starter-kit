@@ -1,8 +1,8 @@
 import { Body, Post, Patch, Controller, UseGuards } from '@nestjs/common';
 
 import { GuestService } from '@/modules/guest/guest.service';
-import { GuestAuthGuard } from '@/common/auth/guest-auth.guard';
-import { CurrentGuest } from '@/common/auth/current-guest.decorator';
+import { GuestAuthGuard } from '@/common/guards/guest-auth.guard';
+import { CurrentGuest } from '@/common/decorators/current-guest.decorator';
 import { UpdateGuestNameDto } from '@/modules/guest/dto/update-guest-name.dto';
 import { InitGuestResponseDto } from '@/modules/guest/dto/init-guest-response.dto';
 import { GuestProfileResponseDto } from '@/modules/guest/dto/guest-profile-response.dto';

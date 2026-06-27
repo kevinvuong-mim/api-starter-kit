@@ -1,5 +1,5 @@
 import { GuestPlayer } from '@prisma/client';
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, createParamDecorator } from '@nestjs/common';
 
 export const CurrentGuest = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): GuestPlayer | undefined => {

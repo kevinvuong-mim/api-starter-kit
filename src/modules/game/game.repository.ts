@@ -8,24 +8,60 @@ import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';
 export class GameRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findByReplayHash(gameId: string, replayHash: string): Promise<GameResult | null> {
-    return this.prisma.gameResult.findUnique({
+  findByReplayHashes(gameId: string, replayHashes: string[]): Promise<GameResult[]> {
+    if (replayHashes.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.prisma.gameResult.findMany({
       where: {
-        gameId_replayHash: { gameId, replayHash },
+        gameId,
+        replayHash: { in: replayHashes },
       },
     });
   }
 
-  createResult(gameId: string, guestId: string, input: GameResultDto): Promise<GameResult> {
-    return this.prisma.gameResult.create({
-      data: {
-        gameId,
-        guestId,
-        score: input.score,
-        duration: input.duration,
-        replayHash: input.replayHash,
-        metadata: input.metadata as Prisma.InputJsonValue | undefined,
-      },
+  async insertResultsBatch(
+    gameId: string,
+    guestId: string,
+    results: GameResultDto[],
+  ): Promise<GameResult[]> {
+    if (results.length === 0) {
+      return [];
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.gameResult.createMany({
+        skipDuplicates: true,
+        data: results.map((input) => ({
+          gameId,
+          guestId,
+          score: input.score,
+          replayHash: input.replayHash,
+          metadata: input.metadata as Prisma.InputJsonValue | undefined,
+        })),
+      });
+
+      const inserted = await tx.gameResult.findMany({
+        where: {
+          gameId,
+          guestId,
+          replayHash: { in: results.map((result) => result.replayHash) },
+        },
+      });
+
+      for (const row of inserted) {
+        await tx.$executeRaw`
+          INSERT INTO "leaderboard" ("gameId", "guestId", "bestScore", "updatedAt")
+          VALUES (${gameId}, ${guestId}, ${row.score}, NOW())
+          ON CONFLICT ("gameId", "guestId")
+          DO UPDATE SET
+            "bestScore" = GREATEST("leaderboard"."bestScore", EXCLUDED."bestScore"),
+            "updatedAt" = NOW()
+        `;
+      }
+
+      return inserted;
     });
   }
 

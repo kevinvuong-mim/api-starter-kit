@@ -17,10 +17,6 @@ export class GameResultDto {
   @IsInt()
   score!: number;
 
-  @Min(0)
-  @IsInt()
-  duration!: number;
-
   @IsString()
   replayHash!: string;
 
