@@ -7,6 +7,7 @@ describe('GameService', () => {
   const guestId = 'guest-1';
   const config: ParsedGameConfig = {
     maxScore: 50000,
+    anomalyMode: 'log',
     replaySecret: 'test-secret',
     playedAtMaxAgeDays: 30,
     playedAtFutureSkewMs: 5 * 60 * 1000,

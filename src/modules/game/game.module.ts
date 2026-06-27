@@ -8,6 +8,7 @@ import { GameRepository } from '@/modules/game/game.repository';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { GuestRateLimitGuard } from '@/common/guards/guest-rate-limit.guard';
 import { GameResultsPartitionService } from '@/modules/game/game-results-partition.service';
+import { GameReplayKeyRetentionService } from '@/modules/game/game-replay-key-retention.service';
 
 @Module({
   controllers: [GameController],
@@ -17,6 +18,7 @@ import { GameResultsPartitionService } from '@/modules/game/game-results-partiti
     GameRegistryService,
     GuestRateLimitGuard,
     GameResultsPartitionService,
+    GameReplayKeyRetentionService,
   ],
   exports: [GameRegistryService, GameRepository],
   imports: [GuestModule, RedisModule],

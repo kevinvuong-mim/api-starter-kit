@@ -14,6 +14,7 @@ export interface LeaderboardRankings {
 @Injectable()
 export class LeaderboardCacheService implements OnModuleInit {
   private readonly logger = new Logger(LeaderboardCacheService.name);
+  private readonly rebuildsInFlight = new Set<string>();
 
   constructor(
     private readonly gameRepository: GameRepository,
@@ -21,8 +22,13 @@ export class LeaderboardCacheService implements OnModuleInit {
     private readonly redisRankingService: RedisRankingService,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.warmAll();
+  onModuleInit(): void {
+    void this.warmAll().catch((error) => {
+      this.logger.warn(
+        'Initial Redis leaderboard warm failed',
+        error instanceof Error ? error.stack : error,
+      );
+    });
   }
 
   async warmAll(): Promise<void> {
@@ -58,16 +64,15 @@ export class LeaderboardCacheService implements OnModuleInit {
       return { entries: [], total: 0, source: 'postgres' };
     }
 
-    // Redis missing or drifted from PG → rebuild from the source of truth, then serve from
-    // Redis so ordering/tie-break/pagination stay consistent with the cached path.
+    // Redis missing or drifted from PG → serve a PostgreSQL page now and repair Redis in
+    // the background. This avoids making a user request pay the full leaderboard rebuild.
     this.logger.warn(
-      `Leaderboard drift for game ${gameId} (redis=${redisCount}, pg=${pgTotal}); rebuilding from PostgreSQL`,
+      `Leaderboard drift for game ${gameId} (redis=${redisCount}, pg=${pgTotal}); scheduling Redis rebuild`,
     );
-    const allEntries = await this.gameRepository.getAllLeaderboardEntries(gameId);
-    await this.redisRankingService.rebuildGlobal(gameId, allEntries);
+    this.scheduleRebuild(gameId);
 
-    const entries = await this.redisRankingService.getTop(key, limit, offset);
-    return { entries, total: allEntries.length, source: 'postgres' };
+    const entries = await this.gameRepository.getLeaderboardEntriesPage(gameId, limit, offset);
+    return { entries, total: pgTotal, source: 'postgres' };
   }
 
   async getPlayerRank(gameId: string, guestId: string): Promise<number | null> {
@@ -79,5 +84,31 @@ export class LeaderboardCacheService implements OnModuleInit {
     }
 
     return this.gameRepository.getPlayerRank(gameId, guestId);
+  }
+
+  private scheduleRebuild(gameId: string): void {
+    if (this.rebuildsInFlight.has(gameId)) {
+      return;
+    }
+
+    this.rebuildsInFlight.add(gameId);
+    void this.rebuildGame(gameId).finally(() => {
+      this.rebuildsInFlight.delete(gameId);
+    });
+  }
+
+  private async rebuildGame(gameId: string): Promise<void> {
+    try {
+      const allEntries = await this.gameRepository.getAllLeaderboardEntries(gameId);
+      await this.redisRankingService.rebuildGlobal(gameId, allEntries);
+      this.logger.log(
+        `Rebuilt Redis leaderboard for game ${gameId} (${allEntries.length} entries)`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Redis leaderboard rebuild failed for game ${gameId}`,
+        error instanceof Error ? error.stack : error,
+      );
+    }
   }
 }

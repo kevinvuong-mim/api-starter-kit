@@ -45,6 +45,7 @@ model GameReplayKey {
 
   @@id([gameId, replayHash])
   @@index([guestId])
+  @@index([createdAt])
   @@map("game_replay_keys")
 }
 

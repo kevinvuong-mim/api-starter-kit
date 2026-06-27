@@ -6,6 +6,7 @@ export const DEFAULT_PLAYED_AT_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 export interface ParsedGameConfig {
   maxScore: number;
+  anomalyMode: 'log' | 'reject';
   minDurationMs?: number;
   maxScorePerMinute?: number;
   replaySecret?: string;
@@ -17,6 +18,7 @@ export function parseGameConfig(config: Prisma.JsonValue): ParsedGameConfig {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     return {
       maxScore: DEFAULT_MAX_SCORE,
+      anomalyMode: 'log',
       playedAtMaxAgeDays: DEFAULT_PLAYED_AT_MAX_AGE_DAYS,
       playedAtFutureSkewMs: DEFAULT_PLAYED_AT_FUTURE_SKEW_MS,
     };
@@ -27,6 +29,7 @@ export function parseGameConfig(config: Prisma.JsonValue): ParsedGameConfig {
   const rawMinDurationMs = record.minDurationMs;
   const rawMaxScorePerMinute = record.maxScorePerMinute;
   const rawReplaySecret = record.replaySecret;
+  const rawAnomalyMode = record.anomalyMode;
   const rawPlayedAtMaxAgeDays = record.playedAtMaxAgeDays;
   const rawPlayedAtFutureSkewMs = record.playedAtFutureSkewMs;
 
@@ -55,6 +58,7 @@ export function parseGameConfig(config: Prisma.JsonValue): ParsedGameConfig {
 
   return {
     maxScore,
+    anomalyMode: rawAnomalyMode === 'reject' ? 'reject' : 'log',
     minDurationMs:
       typeof rawMinDurationMs === 'number' &&
       Number.isFinite(rawMinDurationMs) &&

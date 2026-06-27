@@ -9,9 +9,9 @@ Scalable, multi-game guest backend for mobile games. Built with NestJS, PostgreS
 | **Guest** | Create anonymous players and issue `sessionToken` for protected routes |
 | **Game sync** | Accept offline match results in batches and persist them per `gameId` |
 | **Leaderboard** | Serve paginated global rankings from Redis, with optional `myRank` |
-| **Anti-cheat** | HMAC replay hash + per-game `maxScore` + duplicate detection |
+| **Score integrity** | HMAC replay hash for idempotency/tamper checks + per-game `maxScore` + duplicate detection |
 
-Ads, IAP, and in-game economy are handled on the client (`game-starter-kit`) — this API does not manage monetization.
+Ads, IAP, and in-game economy are handled on the client (`game-starter-kit`) — this API does not manage monetization or server-authoritative entitlements yet.
 
 ## Features
 
@@ -22,7 +22,7 @@ Ads, IAP, and in-game economy are handled on the client (`game-starter-kit`) —
 - **Secure guest recovery** — `installId` + `installSecret` pair (secret returned once at creation)
 - **Offline game sync** — batch upload (1–50 results) with per-item status + idempotent replay handling
 - **Global leaderboard** — paginated top rankings + optional `myRank` via session token
-- **Replay hash validation** — per-game `replaySecret`; client signs `replayHash` with `runSeed` for idempotency and lightweight tamper detection (see [replay-hash-hmac.md](documents/apis/game/replay-hash-hmac.md))
+- **Replay hash validation** — per-game `replaySecret`; client signs `replayHash` with `runSeed` for idempotency and lightweight tamper detection, not complete anti-cheat (see [replay-hash-hmac.md](documents/apis/game/replay-hash-hmac.md))
 - **Redis sorted sets** — fast ranking with consistent PG tie-break encoding
 - **Tiered rate limiting** — IP: 100/min default, 10/min init, 30/min sync; per-guest 30/min sync (Redis)
 - **Security** — Helmet headers, CORS, response compression
@@ -82,6 +82,8 @@ PORT=3000
 NODE_ENV="development"
 SESSION_TOKEN_TTL_DAYS=90
 GAME_RESULTS_RETENTION_MONTHS=36
+REPLAY_KEY_RETENTION_MONTHS=36
+REPLAY_KEY_RETENTION_BATCH_SIZE=5000
 ```
 
 | Variable | Description |
@@ -92,6 +94,8 @@ GAME_RESULTS_RETENTION_MONTHS=36
 | `NODE_ENV` | `development` or `production` |
 | `SESSION_TOKEN_TTL_DAYS` | Guest session token lifetime (default `90`) |
 | `GAME_RESULTS_RETENTION_MONTHS` | Monthly partition retention window (default `36`) |
+| `REPLAY_KEY_RETENTION_MONTHS` | Replay dedup key retention window (default `36`) |
+| `REPLAY_KEY_RETENTION_BATCH_SIZE` | Replay dedup key delete batch size (default `5000`) |
 
 See also: [`documents/setup/environment-variables.md`](documents/setup/environment-variables.md)
 
@@ -212,18 +216,21 @@ Response:
 
 On accept, the API persists `GameResult`, upserts `Leaderboard` (keeps highest score), and updates Redis in real time.
 
-## Anti-Cheat (Replay Hash Only)
+## Score Integrity (Replay Hash Only)
 
-The `ReplayService` validates **only** replay hashes:
+Replay hash validation is an idempotency and lightweight tamper-detection layer. Because the signing secret is present in the client build, it must not be treated as complete anti-cheat against a determined attacker.
 
 | Rule | Action |
 |------|--------|
 | Missing replay hash | Reject |
 | Invalid format (not 64-char SHA-256 hex) | Reject |
+| Invalid HMAC signature | Reject |
+| Score above per-game `maxScore` | Reject |
 | Duplicate replay hash (different guest, same game) | Reject |
 | Same guest resubmits same hash | Accept (idempotent) |
+| `minDurationMs` / `maxScorePerMinute` anomaly | Log by default; reject only when `games.config.anomalyMode = "reject"` |
 
-No score validation, physics checks, seed validation, trust scoring, or server-side replay simulation.
+There are no physics checks, trust scoring, or server-side replay simulation.
 
 ## Leaderboard
 

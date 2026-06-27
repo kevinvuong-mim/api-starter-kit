@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:reset": "prisma migrate reset",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "game:register": "tsx scripts/register-game.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

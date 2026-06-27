@@ -10,6 +10,12 @@ export interface InsertedReplayKey {
   score: number;
 }
 
+export interface LeaderboardPageEntry {
+  rank: number;
+  score: number;
+  guestId: string;
+}
+
 @Injectable()
 export class GameRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -131,6 +137,28 @@ export class GameRepository {
         entries.map((entry) => ({
           guestId: entry.guestId,
           bestScore: entry.bestScore,
+        })),
+      );
+  }
+
+  getLeaderboardEntriesPage(
+    gameId: string,
+    limit: number,
+    offset: number,
+  ): Promise<LeaderboardPageEntry[]> {
+    return this.prisma.leaderboard
+      .findMany({
+        skip: offset,
+        take: limit,
+        where: { gameId },
+        orderBy: [{ bestScore: 'desc' }, { guestId: 'asc' }],
+        select: { guestId: true, bestScore: true },
+      })
+      .then((entries) =>
+        entries.map((entry, index) => ({
+          guestId: entry.guestId,
+          score: entry.bestScore,
+          rank: offset + index + 1,
         })),
       );
   }

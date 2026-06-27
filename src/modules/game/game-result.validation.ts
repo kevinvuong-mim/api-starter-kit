@@ -14,6 +14,8 @@ export enum ResultRejectionReason {
   INVALID_PLAYED_AT = 'INVALID_PLAYED_AT',
   PLAYED_AT_IN_FUTURE = 'PLAYED_AT_IN_FUTURE',
   PLAYED_AT_TOO_OLD = 'PLAYED_AT_TOO_OLD',
+  MIN_DURATION = 'MIN_DURATION',
+  SCORE_RATE = 'SCORE_RATE',
 }
 
 export interface GameResultInput {
@@ -87,6 +89,37 @@ export function validateReplaySignature(
   return { valid: true };
 }
 
+export function validateAnomalyPolicy(
+  input: GameResultInput,
+  config: Pick<ParsedGameConfig, 'anomalyMode' | 'minDurationMs' | 'maxScorePerMinute'>,
+): ResultValidationOutcome {
+  if (config.anomalyMode !== 'reject') {
+    return { valid: true };
+  }
+
+  const durationSeconds =
+    typeof input.metadata?.duration === 'number' && Number.isFinite(input.metadata.duration)
+      ? input.metadata.duration
+      : undefined;
+
+  if (!durationSeconds || durationSeconds <= 0) {
+    return { valid: true };
+  }
+
+  if (config.minDurationMs && durationSeconds * 1000 < config.minDurationMs) {
+    return { valid: false, reason: ResultRejectionReason.MIN_DURATION };
+  }
+
+  if (config.maxScorePerMinute) {
+    const scorePerMinute = (input.score / durationSeconds) * 60;
+    if (scorePerMinute > config.maxScorePerMinute) {
+      return { valid: false, reason: ResultRejectionReason.SCORE_RATE };
+    }
+  }
+
+  return { valid: true };
+}
+
 export function validateGameResult(
   gameId: string,
   guestId: string,
@@ -111,6 +144,11 @@ export function validateGameResult(
   const signatureResult = validateReplaySignature(gameId, input, config.replaySecret);
   if (!signatureResult.valid) {
     return signatureResult;
+  }
+
+  const anomalyResult = validateAnomalyPolicy(input, config);
+  if (!anomalyResult.valid) {
+    return anomalyResult;
   }
 
   if (existing) {

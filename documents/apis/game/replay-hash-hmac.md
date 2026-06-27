@@ -4,9 +4,9 @@
 
 Mỗi game có `replaySecret` trong `games.config`. Client dùng secret này (obfuscate trong SDK) để tạo `replayHash` — server verify HMAC trước khi chấp nhận score.
 
-**Mục tiêu:** Ngăn score injection đơn giản (chỉnh request / random hash) cho game casual offline-first.
+**Mục tiêu:** idempotency, duplicate detection, và ngăn score injection đơn giản (chỉnh request / random hash) cho game casual offline-first.
 
-**Không thay thế:** server-side gameplay simulation.
+**Không thay thế:** server-side gameplay simulation, device attestation, hoặc anti-cheat hoàn chỉnh. Vì secret nằm trong client build, attacker có thể extract và ký score hợp lệ.
 
 ---
 
@@ -16,6 +16,7 @@ Mỗi game có `replaySecret` trong `games.config`. Client dùng secret này (ob
 {
   "maxScore": 50000,
   "replaySecret": "your-per-game-secret",
+  "anomalyMode": "log",
   "playedAtMaxAgeDays": 30,
   "playedAtFutureSkewMs": 300000
 }
@@ -25,6 +26,7 @@ Mỗi game có `replaySecret` trong `games.config`. Client dùng secret này (ob
 |-------|---------|-------------|
 | `maxScore` | `100000` | Điểm tối đa hợp lệ |
 | `replaySecret` | — | Bắt buộc cho production; nếu thiếu, server chỉ validate format hash |
+| `anomalyMode` | `log` | `log` chỉ ghi nhận anomaly; `reject` từ chối `minDurationMs` / `maxScorePerMinute` |
 | `playedAtMaxAgeDays` | `30` | Tuổi tối đa của `playedAt` |
 | `playedAtFutureSkewMs` | `300000` (5 phút) | Cho phép clock skew về tương lai |
 
@@ -99,7 +101,8 @@ export function computeReplayHash(
 2. `playedAt` skew (nếu có)
 3. `score ≤ maxScore`
 4. HMAC verify (nếu `replaySecret` configured)
-5. Duplicate / score mismatch (`game_replay_keys`)
+5. Anomaly policy nếu `anomalyMode = "reject"`
+6. Duplicate / score mismatch (`game_replay_keys`)
 
 ---
 
@@ -117,6 +120,8 @@ export function computeReplayHash(
 | `INVALID_PLAYED_AT` | `playedAt` không parse được |
 | `PLAYED_AT_IN_FUTURE` | `playedAt` quá xa tương lai |
 | `PLAYED_AT_TOO_OLD` | `playedAt` quá cũ |
+| `MIN_DURATION` | Duration thấp hơn `minDurationMs` khi `anomalyMode = "reject"` |
+| `SCORE_RATE` | Score/minute vượt `maxScorePerMinute` khi `anomalyMode = "reject"` |
 
 ---
 
@@ -130,6 +135,7 @@ export function computeReplayHash(
 
 ## Security Notes
 
-- `replaySecret` nên obfuscate trong client build (không plaintext trong repo game).
+- `replaySecret` nên obfuscate trong client build (không plaintext trong repo game), nhưng obfuscation không làm secret trở thành an toàn tuyệt đối.
 - Rotate secret khi game update major: set secret mới trong DB, ship client mới.
 - Dev games có thể tạm bỏ `replaySecret` để test nhanh — **không dùng production**.
+- Nếu leaderboard có giá trị cạnh tranh, bật thêm server-side risk policy hoặc anti-cheat thật; HMAC client-side không đủ.
