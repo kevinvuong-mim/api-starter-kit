@@ -2,27 +2,21 @@
 
 ## Overview
 
-API kiểm tra trạng thái hoạt động của server. Dùng cho health probe, load balancer, hoặc xác nhận service đã sẵn sàng nhận request.
+API kiểm tra trạng thái server và dependencies. Gồm endpoint đơn giản (`GET /api`) và health check đầy đủ (`GET /api/health`) với Postgres + Redis.
 
 **Base URL**: `/api`
 
 ---
 
-## Endpoint
+## Endpoints
 
-### Health Check (Kiểm tra server)
-
-Trả về chuỗi xác nhận server đang chạy.
+### 1. Root Health (Hello)
 
 **Endpoint**: `GET /api`
 
-**Authentication**: Không yêu cầu (Public)
+**Authentication**: Public
 
-**Rate Limit**: 100 requests / phút / IP (global throttler)
-
-#### Response
-
-**Success (200 OK)**
+#### Response (200 OK)
 
 ```json
 {
@@ -30,38 +24,12 @@ Trả về chuỗi xác nhận server đang chạy.
   "statusCode": 200,
   "message": "Data retrieved successfully",
   "data": "Hello World!",
-  "timestamp": "2026-06-25T12:00:00.000Z",
+  "timestamp": "2026-06-27T12:00:00.000Z",
   "path": "/api"
 }
 ```
 
-#### Response Schema
-
-| Field     | Type    | Description                                      |
-| --------- | ------- | ------------------------------------------------ |
-| success   | boolean | Luôn `true` khi request thành công               |
-| statusCode| number  | HTTP status code                                 |
-| message   | string  | Thông báo mặc định theo HTTP method              |
-| data      | string  | Nội dung health check (`"Hello World!"`)         |
-| timestamp | string  | Thời điểm response (ISO 8601)                  |
-| path      | string  | Đường dẫn request                                |
-
-**Error Responses**
-
-- **429 Too Many Requests**: Vượt quá rate limit
-
-```json
-{
-  "success": false,
-  "statusCode": 429,
-  "message": "ThrottlerException: Too Many Requests",
-  "error": "Too Many Requests",
-  "timestamp": "2026-06-25T12:00:00.000Z",
-  "path": "/api"
-}
-```
-
-#### cURL Example
+#### cURL
 
 ```bash
 curl http://localhost:3000/api
@@ -69,25 +37,70 @@ curl http://localhost:3000/api
 
 ---
 
+### 2. Full Health Check
+
+Kiểm tra Postgres và Redis connectivity. Dùng cho load balancer / k8s probe.
+
+**Endpoint**: `GET /api/health`
+
+**Authentication**: Public
+
+#### Response (200 OK)
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Data retrieved successfully",
+  "data": {
+    "status": "ok",
+    "postgres": "up",
+    "redis": "up",
+    "timestamp": "2026-06-27T12:00:00.000Z"
+  },
+  "timestamp": "2026-06-27T12:00:00.000Z",
+  "path": "/api/health"
+}
+```
+
+#### Response Schema (`data`)
+
+| Field     | Type   | Description                          |
+| --------- | ------ | ------------------------------------ |
+| status    | string | `ok` nếu cả Postgres và Redis up; `degraded` nếu một trong hai down |
+| postgres  | string | `up` \| `down`                       |
+| redis     | string | `up` \| `down`                       |
+| timestamp | string | Thời điểm check (ISO 8601)           |
+
+**Lưu ý**: HTTP status vẫn **200** khi `degraded` — client/probe cần đọc `data.status`.
+
+#### cURL
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+---
+
 ## Business Logic
 
-1. **Route handler**: `AppController.getHello()` gọi `AppService.getHello()`
-2. **Return value**: Chuỗi `"Hello World!"`
-3. **Auto-wrap response**: `ResponseInterceptor` bọc kết quả vào standard format
+- `GET /api` → `AppService.getHello()`.
+- `GET /api/health` → `HealthService.check()`:
+  - Postgres: `SELECT 1` qua Prisma.
+  - Redis: `PING`.
 
 ---
 
 ## Related Endpoints
 
-- **POST /api/guest/init**: Khởi tạo guest player (trả về `guestId` + `sessionToken`)
-- **GET /api/leaderboard/global**: Lấy bảng xếp hạng (pagination, optional `sessionToken` cho `myRank`)
+- [Init Guest](../guest/init-guest.md)
+- [Leaderboard](../leaderboard/global-leaderboard.md)
 
 ---
 
 ## Notes
 
-- **Read-only endpoint**: Chỉ GET, không modify data
-- **No authentication**: Có thể gọi mà không cần token
-- **Global prefix**: Tất cả routes đều có prefix `/api` (cấu hình trong `main.ts`)
-- **Automatic wrapping**: Response được wrap bởi `ResponseInterceptor`
-- **CORS**: Server cho phép headers `Content-Type` và `Authorization`
+- Global prefix `/api` (cấu hình `main.ts`).
+- Response envelope qua `ResponseInterceptor`.
+- Request ID: header `x-request-id` (tự generate nếu client không gửi).
+- Structured logging qua `LoggingInterceptor`.

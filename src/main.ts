@@ -4,6 +4,8 @@ import { AppModule } from '@/app.module';
 import { NestFactory } from '@nestjs/core';
 import { HttpExceptionFilter } from '@/common/filters';
 import { ResponseInterceptor } from '@/common/interceptors';
+import { LoggingInterceptor } from '@/common/interceptors/logging.interceptor';
+import { requestIdMiddleware } from '@/common/middleware/request-id.middleware';
 import { Logger, HttpException, ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
@@ -11,8 +13,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api');
+  app.use(requestIdMiddleware);
 
-  // Helmet - Security headers middleware
   app.use(
     helmet({
       hsts: {
@@ -24,16 +26,15 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
     methods: ['GET', 'PUT', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  // Global validation pipe với whitelist để tránh mass assignment
   app.useGlobalPipes(
     new ValidationPipe({
-      transform: true, // Auto transform types
-      whitelist: true, // Strip properties không có decorator
-      forbidNonWhitelisted: true, // Throw error nếu có property không mong muốn
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
       transformOptions: { enableImplicitConversion: true },
       exceptionFactory: (errors) => {
         const formattedErrors = errors.flatMap((error) => {
@@ -61,27 +62,22 @@ async function bootstrap() {
     }),
   );
 
-  // Global exception filter - Format all error responses
   app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor(), new LoggingInterceptor());
 
-  // Global response interceptor - Format all success responses
-  app.useGlobalInterceptors(new ResponseInterceptor());
-
-  // Compression - Enable response compression
   app.use(
     compression({
-      level: 6, // Compression level (0-9)
-      threshold: 1024, // Only compress response > 1KB
+      level: 6,
+      threshold: 1024,
     }),
   );
 
-  // Graceful shutdown
   app.enableShutdownHooks();
 
   const port = process.env.PORT ?? 3000;
 
   await app.listen(port);
-  logger.log(`🚀 Application is running on: http://localhost:${port}/api`);
+  logger.log(`Application is running on: http://localhost:${port}/api`);
 }
 
 bootstrap().catch((err) => {

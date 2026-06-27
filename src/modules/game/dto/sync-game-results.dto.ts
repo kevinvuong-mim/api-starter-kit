@@ -3,6 +3,7 @@ import {
   IsInt,
   IsArray,
   IsString,
+  IsISO8601,
   IsOptional,
   ArrayMaxSize,
   ArrayMinSize,
@@ -21,14 +22,15 @@ export class GameResultDto {
   replayHash!: string;
 
   @IsOptional()
+  @IsISO8601({ strict: true })
+  playedAt?: string;
+
+  @IsOptional()
   @IsValidMetadata()
   metadata?: Record<string, string | number | boolean | null>;
 }
 
 export class SyncGameResultsDto {
-  @IsString()
-  gameId!: string;
-
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(50)

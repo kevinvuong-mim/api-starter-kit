@@ -1,14 +1,17 @@
 import Redis from 'ioredis';
-import { ConfigService } from '@nestjs/config';
 import { Inject, Logger, Injectable, OnModuleDestroy } from '@nestjs/common';
 
+import {
+  decodeLeaderboardScore,
+  encodeLeaderboardScore,
+} from '@/common/utils/leaderboard-score.util';
 import { REDIS_KEYS, REDIS_CLIENT, LeaderboardEntry } from '@/modules/redis/redis.constants';
 
 const LEADERBOARD_TOP_LIMIT = 100;
 const REDIS_UPDATE_MAX_RETRIES = 3;
 const REDIS_UPDATE_RETRY_DELAY_MS = 100;
 
-// Atomic: chỉ cập nhật khi score mới lớn hơn score hiện tại (hoặc member chưa tồn tại).
+// Atomic: chỉ cập nhật khi encoded score mới lớn hơn score hiện tại (hoặc member chưa tồn tại).
 const UPDATE_SCORE_SCRIPT = `
 local current = redis.call('ZSCORE', KEYS[1], ARGV[1])
 if current == false or tonumber(ARGV[2]) > tonumber(current) then
@@ -31,14 +34,15 @@ export class RedisRankingService implements OnModuleDestroy {
     await this.redis.quit();
   }
 
-  async updateScore(key: string, guestId: string, score: number): Promise<void> {
+  async updateScore(key: string, guestId: string, bestScore: number): Promise<void> {
+    const encodedScore = encodeLeaderboardScore(bestScore, guestId);
+
     for (let attempt = 1; attempt <= REDIS_UPDATE_MAX_RETRIES; attempt++) {
       try {
-        await this.redis.eval(UPDATE_SCORE_SCRIPT, 1, key, guestId, String(score));
+        await this.redis.eval(UPDATE_SCORE_SCRIPT, 1, key, guestId, String(encodedScore));
         return;
       } catch (error) {
         if (attempt === REDIS_UPDATE_MAX_RETRIES) {
-          // Postgres là source of truth; cron rebuild sẽ đồng bộ lại Redis.
           this.logger.warn(
             `Redis updateScore failed after ${REDIS_UPDATE_MAX_RETRIES} attempts for ${key}/${guestId}`,
             error instanceof Error ? error.stack : error,
@@ -63,7 +67,7 @@ export class RedisRankingService implements OnModuleDestroy {
     for (let i = 0; i < results.length; i += 2) {
       entries.push({
         guestId: results[i],
-        score: Number(results[i + 1]),
+        score: decodeLeaderboardScore(Number(results[i + 1])),
         rank: offset + i / 2 + 1,
       });
     }
@@ -79,8 +83,8 @@ export class RedisRankingService implements OnModuleDestroy {
     key: string,
     guestId: string,
   ): Promise<{ rank: number; score: number } | null> {
-    const score = await this.redis.zscore(key, guestId);
-    if (score === null) {
+    const encodedScore = await this.redis.zscore(key, guestId);
+    if (encodedScore === null) {
       return null;
     }
 
@@ -89,7 +93,10 @@ export class RedisRankingService implements OnModuleDestroy {
       return null;
     }
 
-    return { rank: rank + 1, score: Number(score) };
+    return {
+      rank: rank + 1,
+      score: decodeLeaderboardScore(Number(encodedScore)),
+    };
   }
 
   async rebuildGlobal(
@@ -105,7 +112,7 @@ export class RedisRankingService implements OnModuleDestroy {
 
     const args: Array<string | number> = [];
     for (const entry of entries) {
-      args.push(entry.bestScore, entry.guestId);
+      args.push(encodeLeaderboardScore(entry.bestScore, entry.guestId), entry.guestId);
     }
 
     await this.redis.zadd(key, ...args);
@@ -116,8 +123,10 @@ export class RedisRankingService implements OnModuleDestroy {
   }
 }
 
-export function createRedisClient(configService: ConfigService): Redis {
-  const url = configService.get<string>('REDIS_URL');
+export function createRedisClient(configService: {
+  get: (key: string) => string | undefined;
+}): Redis {
+  const url = configService.get('REDIS_URL');
   if (!url) {
     throw new Error('REDIS_URL is not configured');
   }

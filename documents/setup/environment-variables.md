@@ -1,31 +1,23 @@
 # Hướng dẫn lấy các biến môi trường
 
-Tài liệu này hướng dẫn cách lấy các biến môi trường cần thiết cho dự án api-starter-kit.
+Tài liệu này hướng dẫn các biến môi trường cần thiết cho dự án api-starter-kit.
 
 ## 1. Database
 
 ### DATABASE_URL
 
-Đây là connection string để kết nối tới PostgreSQL database.
+Connection string PostgreSQL.
 
 **Format:**
 
-```
+```env
 DATABASE_URL="postgresql://username:password@host:port/database_name"
 ```
 
-**Các thành phần:**
+**Ví dụ (local Docker):**
 
-- `username`: Tên user PostgreSQL (mặc định: `postgres`)
-- `password`: Mật khẩu của user
-- `host`: Địa chỉ server database (mặc định: `localhost`)
-- `port`: Cổng PostgreSQL (mặc định: `5432`)
-- `database_name`: Tên database (ví dụ: `game`)
-
-**Ví dụ:**
-
-```
-DATABASE_URL="postgresql://postgres:mypassword@localhost:5432/game"
+```env
+DATABASE_URL="postgresql://game_user:change_me@localhost:5432/game"
 ```
 
 ---
@@ -34,62 +26,64 @@ DATABASE_URL="postgresql://postgres:mypassword@localhost:5432/game"
 
 ### REDIS_URL
 
-Chuỗi kết nối Redis.
-
-**Format:**
-
 ```env
 REDIS_URL="redis://localhost:6379"
 ```
+
+---
 
 ## 3. Server Configuration
 
 ### PORT
 
-Cổng mà server API sẽ chạy.
-
-**Ví dụ:**
-
-```
+```env
 PORT=3000
 ```
 
-**Lưu ý:**
-
-- Port mặc định thường là 3000
-- Đảm bảo port không bị sử dụng bởi ứng dụng khác
-- Có thể thay đổi nếu cần (3001, 8000, 8080, v.v.)
-
 ### NODE_ENV
 
-Môi trường chạy của ứng dụng.
-
-**Các giá trị:**
-
-- `development`: Môi trường phát triển (dev)
-- `production`: Môi trường sản xuất (production)
-- `test`: Môi trường testing
-
-**Ví dụ:**
-
-```
+```env
 NODE_ENV="development"
 ```
 
-**Lưu ý:**
-
-- Trong môi trường development, logging chi tiết hơn và có hot-reload
-- Trong production, ứng dụng được tối ưu hóa về hiệu suất
+- `development`: logging chi tiết hơn (stack trace trong error response).
+- `production`: tối ưu runtime.
 
 ---
 
-## Tổng hợp - File .env hoàn chỉnh
+## 4. Guest Session
 
-Sau khi lấy được tất cả các biến, thêm chúng vào file `.env` của dự án:
+### SESSION_TOKEN_TTL_DAYS
+
+Thời hạn session token (ngày). Mặc định: `90`.
+
+```env
+SESSION_TOKEN_TTL_DAYS=90
+```
+
+Token hết hạn → client gọi `POST /api/guest/init` với `installId` để re-link và nhận token mới.
+
+---
+
+## 5. Data Retention
+
+### GAME_RESULTS_RETENTION_MONTHS
+
+Số tháng giữ partition `game_results`. Partition cũ hơn sẽ bị drop bởi cron (ngày 1 hàng tháng, 04:00). Mặc định: `12`.
+
+```env
+GAME_RESULTS_RETENTION_MONTHS=36
+```
+
+**Lưu ý**: Bảng `game_replay_keys` (dedup replay hash) **không** bị xóa — leaderboard dùng bảng `leaderboard`.
+
+---
+
+## Tổng hợp — File .env hoàn chỉnh
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/game"
+DATABASE_URL="postgresql://game_user:change_me@localhost:5432/game"
 
 # Redis
 REDIS_URL="redis://localhost:6379"
@@ -97,121 +91,48 @@ REDIS_URL="redis://localhost:6379"
 # Server
 PORT=3000
 NODE_ENV="development"
+
+# Guest session
+SESSION_TOKEN_TTL_DAYS=90
+
+# Retention
+GAME_RESULTS_RETENTION_MONTHS=36
 ```
 
 **Lưu ý quan trọng:**
 
-- File `.env` chứa thông tin nhạy cảm, **KHÔNG BAO GIỜ commit lên Git**
-- Đảm bảo `.env` đã được thêm vào `.gitignore`
-- Sử dụng file `.env.example` để chia sẻ template với team
-- Mỗi môi trường (dev, staging, production) nên có file `.env` riêng với các giá trị khác nhau
+- File `.env` **không commit** lên Git.
+- Dùng `.env.example` làm template.
+- Mỗi môi trường (dev/staging/prod) có `.env` riêng.
 
 ---
 
-## Troubleshooting - Các lỗi thường gặp
+## Troubleshooting
 
-### 1. Lỗi Database Connection
-
-**Lỗi:** `Error: Can't reach database server`
-
-**Nguyên nhân:**
-
-- PostgreSQL chưa chạy
-- DATABASE_URL sai format
-- Port/host/credentials không đúng
-
-**Giải pháp:**
+### Database connection failed
 
 ```bash
-# Kiểm tra PostgreSQL đang chạy
-# macOS
-brew services list
-
-# Hoặc
-ps aux | grep postgres
-
-# Start PostgreSQL nếu chưa chạy
-brew services start postgresql
-
-# Test connection
-psql -U postgres -d game
+docker-compose ps
+docker-compose logs postgres
 ```
 
-### 2. Port already in use
-
-**Lỗi:** `Error: listen EADDRINUSE: address already in use :::3000`
-
-**Nguyên nhân:** Port 3000 đã được process khác sử dụng
-
-**Giải pháp:**
+### Redis connection failed
 
 ```bash
-# Tìm process đang dùng port 3000
-lsof -i :3000
-
-# Kill process
-kill -9 <PID>
-
-# Hoặc đổi PORT trong .env
-PORT=3001
+docker-compose exec redis redis-cli ping
 ```
 
-### 3. Environment variables không load
-
-**Lỗi:** `undefined` khi access `process.env.XXX`
-
-**Nguyên nhân:**
-
-- File `.env` không ở root folder
-- Chưa install `@nestjs/config`
-- Chưa import ConfigModule
-
-**Giải pháp:**
+### Migration failed
 
 ```bash
-# Kiểm tra file .env ở đúng vị trí
+npx prisma migrate deploy
+npx prisma generate
+```
+
+### Env không load
+
+```bash
+# File .env phải ở root api-starter-kit
 ls -la .env
-
-# Restart server
 npm run start:dev
-
-# Verify variables loaded
-# Trong code, log ra xem:
-console.log(process.env.JWT_SECRET);
 ```
-
-### 4. Database migration lỗi
-
-**Lỗi:** `Prisma migration failed`
-
-**Nguyên nhân:**
-
-- DATABASE_URL chưa đúng
-- Database chưa được tạo
-
-**Giải pháp:**
-
-```bash
-# Tạo database trước
-psql -U postgres
-CREATE DATABASE game;
-\q
-
-# Run migration
-npx prisma migrate dev
-
-# Hoặc reset database
-npx prisma migrate reset
-```
-
-### 11. Production deployment issues
-
-**Lỗi:** Works local nhưng không work khi deploy
-
-**Giải pháp checklist:**
-
-- [ ] Tất cả env variables đã set trên production server
-- [ ] NODE_ENV="production"
-- [ ] Database accessible từ production server
-
----

@@ -9,7 +9,7 @@ Scalable, multi-game guest backend for mobile games. Built with NestJS, PostgreS
 | **Guest** | Create anonymous players and issue `sessionToken` for protected routes |
 | **Game sync** | Accept offline match results in batches and persist them per `gameId` |
 | **Leaderboard** | Serve paginated global rankings from Redis, with optional `myRank` |
-| **Anti-cheat** | Validate replay hashes (SHA-256) and reject duplicate replays from other guests |
+| **Anti-cheat** | HMAC replay hash + per-game `maxScore` + duplicate detection |
 
 Ads, IAP, and in-game economy are handled on the client (`game-starter-kit`) — this API does not manage monetization.
 
@@ -19,11 +19,12 @@ Ads, IAP, and in-game economy are handled on the client (`game-starter-kit`) —
 - **Guest initialization** — anonymous players shared across games (no login)
 - **Guest session tokens** — `sessionToken` issued at init; protected routes use `Authorization: Bearer <token>`
 - **Guest display names** — optional display name per guest (shown on leaderboards)
-- **Offline game sync** — batch upload (1–50 results) with idempotent replay handling
+- **Secure guest recovery** — `installId` + `installSecret` pair (secret returned once at creation)
+- **Offline game sync** — batch upload (1–50 results) with per-item status + idempotent replay handling
 - **Global leaderboard** — paginated top rankings + optional `myRank` via session token
-- **Replay-only anti-cheat** — SHA-256 replay hash validation and duplicate detection only
-- **Redis sorted sets** — fast ranking via `ZADD`, `ZREVRANGE`, `ZREVRANK`
-- **Rate limiting** — 100 requests per minute per IP (NestJS Throttler)
+- **HMAC anti-cheat** — per-game `replaySecret`; client signs `replayHash` with `runSeed` (see [replay-hash-hmac.md](documents/apis/game/replay-hash-hmac.md))
+- **Redis sorted sets** — fast ranking with consistent PG tie-break encoding
+- **Tiered rate limiting** — IP: 100/min default, 10/min init, 30/min sync; per-guest 30/min sync (Redis)
 - **Security** — Helmet headers, CORS, response compression
 - **Background jobs** — daily Redis leaderboard rebuild from PostgreSQL
 
@@ -34,10 +35,12 @@ Base URL: `http://localhost:3000/api`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/` | Public | Health check (`Hello World!`) |
-| `POST` | `/guest/init` | Public | Create guest, return `guestId` + `sessionToken` |
+| `POST` | `/guest/init` | Public | Create guest; returns `installSecret` once when `installId` provided |
 | `PATCH` | `/guest/name` | Bearer token | Update guest display name |
-| `POST` | `/game/sync` | Bearer token | Upload batch of game results |
-| `GET` | `/leaderboard/global` | Optional Bearer | Global leaderboard (`?gameId=&page=&limit=`) |
+| `GET` | `/health` | Public | Health check (Postgres + Redis) |
+| `GET` | `/guest/me` | Bearer token | Current guest profile |
+| `POST` | `/games/:gameId/results` | Bearer token | Upload batch of game results |
+| `GET` | `/leaderboards` | Optional Bearer | Leaderboard (`?gameId=&page=&limit=`) |
 
 Detailed request/response examples: [`documents/apis/`](documents/apis/)
 
@@ -73,10 +76,12 @@ curl http://localhost:3000/api
 ## Environment Variables
 
 ```env
-DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game"
+DATABASE_URL="postgresql://game_user:change_me@localhost:5432/game"
 REDIS_URL="redis://localhost:6379"
 PORT=3000
 NODE_ENV="development"
+SESSION_TOKEN_TTL_DAYS=90
+GAME_RESULTS_RETENTION_MONTHS=36
 ```
 
 | Variable | Description |
@@ -85,6 +90,8 @@ NODE_ENV="development"
 | `REDIS_URL` | Redis connection string |
 | `PORT` | HTTP port (default `3000`) |
 | `NODE_ENV` | `development` or `production` |
+| `SESSION_TOKEN_TTL_DAYS` | Guest session token lifetime (default `90`) |
+| `GAME_RESULTS_RETENTION_MONTHS` | Monthly partition retention window (default `36`) |
 
 See also: [`documents/setup/environment-variables.md`](documents/setup/environment-variables.md)
 
@@ -104,10 +111,9 @@ src/
 │   ├── utils/              # Bearer token extraction
 │   └── validators/         # Custom DTO validators
 ├── modules/
-│   ├── guest/              # Guest init + display name
-│   ├── game/               # Game sync, registry, repository
-│   ├── replay/             # Replay hash validation (anti-cheat)
-│   ├── leaderboard/        # Global rankings + daily maintenance cron
+│   ├── guest/              # Guest init, profile, display name
+│   ├── game/               # Game sync, registry, validation, partitions
+│   ├── leaderboard/        # Rankings, Redis cache warm/fallback, maintenance
 │   ├── redis/              # Redis sorted set service
 │   └── prisma/             # Database client
 prisma/
@@ -127,8 +133,8 @@ Authorization: Bearer <sessionToken>
 | Auth type | Routes |
 |-----------|--------|
 | Public | `GET /api`, `POST /api/guest/init` |
-| Required (`GuestAuthGuard`) | `PATCH /api/guest/name`, `POST /api/game/sync` |
-| Optional (`OptionalGuestAuthGuard`) | `GET /api/leaderboard/global` (for `myRank`) |
+| Required (`GuestAuthGuard`) | `GET /api/guest/me`, `PATCH /api/guest/name`, `POST /api/games/:gameId/results` |
+| Optional (`OptionalGuestAuthGuard`) | `GET /api/leaderboards` (for `myRank`) |
 
 `guestId` is resolved from the token on the server — do not send it in request bodies for protected routes.
 
@@ -164,11 +170,10 @@ Default seeded games: `puzzle-quest`, `arcade-rush`.
 
 ## Game Sync
 
-`POST /api/game/sync` accepts:
+`POST /api/games/:gameId/results` accepts:
 
 ```json
 {
-  "gameId": "puzzle-quest",
   "results": [
     {
       "score": 1200,
@@ -213,7 +218,7 @@ No score validation, physics checks, seed validation, trust scoring, or server-s
 
 ## Leaderboard
 
-`GET /api/leaderboard/global?gameId=puzzle-quest&page=1&limit=100`
+`GET /api/leaderboards?gameId=puzzle-quest&page=1&limit=100`
 
 - `page`: minimum 1 (default `1`)
 - `limit`: 1–100 (default `100`)
@@ -248,9 +253,10 @@ See: [`documents/tasks/leaderboard-maintenance.md`](documents/tasks/leaderboard-
 |-------|----------|
 | Health check | [`documents/apis/health/health-check.md`](documents/apis/health/health-check.md) |
 | Init guest | [`documents/apis/guest/init-guest.md`](documents/apis/guest/init-guest.md) |
+| Get guest profile | [`documents/apis/guest/get-guest-me.md`](documents/apis/guest/get-guest-me.md) |
 | Update guest name | [`documents/apis/guest/update-guest-name.md`](documents/apis/guest/update-guest-name.md) |
 | Sync game results | [`documents/apis/game/sync-game-results.md`](documents/apis/game/sync-game-results.md) |
-| Global leaderboard | [`documents/apis/leaderboard/global-leaderboard.md`](documents/apis/leaderboard/global-leaderboard.md) |
+| Leaderboard | [`documents/apis/leaderboard/global-leaderboard.md`](documents/apis/leaderboard/global-leaderboard.md) |
 | Leaderboard cron | [`documents/tasks/leaderboard-maintenance.md`](documents/tasks/leaderboard-maintenance.md) |
 | Docker setup | [`documents/setup/docker.md`](documents/setup/docker.md) |
 

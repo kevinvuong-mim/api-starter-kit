@@ -6,16 +6,16 @@ import { OptionalGuestAuthGuard } from '@/common/guards/optional-guest-auth.guar
 import { LeaderboardQueryDto } from '@/modules/leaderboard/dto/leaderboard-query.dto';
 import { LeaderboardResponseDto } from '@/modules/leaderboard/dto/leaderboard-response.dto';
 
-@Controller('leaderboard')
+@Controller('leaderboards')
 export class LeaderboardController {
   constructor(private readonly leaderboardService: LeaderboardService) {}
 
-  @Get('global')
+  @Get()
   @UseGuards(OptionalGuestAuthGuard)
-  getGlobal(
+  getLeaderboard(
     @Query() query: LeaderboardQueryDto,
     @CurrentGuest() guest?: { id: string },
   ): Promise<LeaderboardResponseDto> {
-    return this.leaderboardService.getGlobalLeaderboard(query, guest?.id);
+    return this.leaderboardService.getLeaderboard(query, guest?.id);
   }
 }

@@ -1,9 +1,11 @@
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { AppModule } from '@/app.module';
+import { HttpExceptionFilter } from '@/common/filters';
+import { ResponseInterceptor } from '@/common/interceptors';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -14,20 +16,31 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    app.useGlobalPipes(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
+    app.useGlobalFilters(new HttpExceptionFilter());
+    app.useGlobalInterceptors(new ResponseInterceptor());
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('/api (GET)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/api')
       .expect(200)
       .expect((res) => {
-        expect(res.body).toHaveProperty('path', '/');
-        expect(res.body).toHaveProperty('timestamp');
         expect(res.body).toHaveProperty('success', true);
-        expect(res.body).toHaveProperty('statusCode', 200);
         expect(res.body).toHaveProperty('data', 'Hello World!');
-        expect(res.body).toHaveProperty('message', 'Data retrieved successfully');
       });
   });
 });

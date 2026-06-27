@@ -2,19 +2,19 @@ import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
-import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { LeaderboardQueryDto } from '@/modules/leaderboard/dto/leaderboard-query.dto';
 import { LeaderboardResponseDto } from '@/modules/leaderboard/dto/leaderboard-response.dto';
+import { LeaderboardCacheService } from '@/modules/leaderboard/leaderboard-cache.service';
 
 @Injectable()
 export class LeaderboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gameRegistryService: GameRegistryService,
-    private readonly redisRankingService: RedisRankingService,
+    private readonly leaderboardCacheService: LeaderboardCacheService,
   ) {}
 
-  async getGlobalLeaderboard(
+  async getLeaderboard(
     query: LeaderboardQueryDto,
     guestId?: string,
   ): Promise<LeaderboardResponseDto> {
@@ -23,24 +23,26 @@ export class LeaderboardService {
     const page = query.page;
     const limit = Math.min(query.limit, 100);
     const offset = (page - 1) * limit;
-    const key = this.redisRankingService.getGlobalKey(query.gameId);
 
-    const [top, total] = await Promise.all([
-      this.redisRankingService.getTop(key, limit, offset),
-      this.redisRankingService.getCount(key),
-    ]);
+    const { entries, total } = await this.leaderboardCacheService.getRankings(
+      query.gameId,
+      limit,
+      offset,
+    );
 
-    const names = await this.resolveGuestNames(top.map((entry) => entry.guestId));
+    const names = await this.resolveGuestNames(entries.map((entry) => entry.guestId));
 
     let myRank: number | null = null;
     if (guestId) {
-      myRank = await this.resolveMyRank(key, guestId, top);
+      const inTop = entries.find((entry) => entry.guestId === guestId);
+      myRank =
+        inTop?.rank ?? (await this.leaderboardCacheService.getPlayerRank(query.gameId, guestId));
     }
 
     const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
 
     return {
-      top: top.map((entry) => ({
+      top: entries.map((entry) => ({
         ...entry,
         name: names.get(entry.guestId) ?? null,
       })),
@@ -65,19 +67,5 @@ export class LeaderboardService {
     });
 
     return new Map(guests.map((guest) => [guest.id, guest.name]));
-  }
-
-  private async resolveMyRank(
-    key: string,
-    guestId: string,
-    top: Array<{ guestId: string; rank: number }>,
-  ): Promise<number | null> {
-    const inTop = top.find((entry) => entry.guestId === guestId);
-    if (inTop) {
-      return inTop.rank;
-    }
-
-    const rankInfo = await this.redisRankingService.getPlayerRank(key, guestId);
-    return rankInfo?.rank ?? null;
   }
 }

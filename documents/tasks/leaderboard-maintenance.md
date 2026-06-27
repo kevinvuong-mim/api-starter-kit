@@ -1,94 +1,97 @@
-# Scheduled Leaderboard Maintenance Tasks
+# Scheduled Maintenance Tasks
 
-Tài liệu này mô tả chi tiết các cron job được triển khai trong file `src/modules/leaderboard/leaderboard-maintenance.service.ts` của dự án API Starter Kit. Các tác vụ này giúp đồng bộ dữ liệu bảng xếp hạng từ PostgreSQL (source of truth) sang Redis sorted set, đảm bảo API leaderboard luôn trả về ranking chính xác.
+Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và data retention.
 
-**Module liên quan:** `LeaderboardModule` (đăng ký qua `ScheduleModule.forRoot()` trong `app.module.ts`)
+**Modules:** `LeaderboardModule`, `GameModule` (`ScheduleModule.forRoot()` trong `app.module.ts`)
 
 ---
 
-## 1. rebuildRedisLeaderboards
+## 1. Redis Leaderboard Warm (on boot)
 
-**Schedule:** Mỗi ngày lúc 3:00 sáng (`0 3 * * *`)
-
-**Cron expression:** `0 3 * * *` (phút 0, giờ 3, mọi ngày)
+**Trigger:** `LeaderboardCacheService.onModuleInit()`
 
 **Purpose:**
 
-- Rebuild toàn bộ Redis sorted set leaderboard từ dữ liệu PostgreSQL cho mỗi game đang active.
-- Khắc phục drift giữa Redis và database (ví dụ: Redis restart, lỗi ghi tạm thời, hoặc dữ liệu không đồng bộ).
-- Đảm bảo `GET /api/leaderboard/global` luôn phản ánh đúng best score all-time đã lưu trong bảng `leaderboard`.
+- Warm Redis sorted set từ PostgreSQL khi app khởi động.
+- Tránh leaderboard trống sau Redis restart / deploy mới.
 
-**Operation Logic:**
+**Logic:**
 
-1. Ghi log bắt đầu: `"Rebuilding Redis leaderboards from database"`.
-2. Lấy danh sách game active qua `GameRegistryService.getActiveGames()` (`isActive: true`, sắp xếp theo `id` asc).
-3. Với mỗi game:
-   - Query bảng `leaderboard` trong PostgreSQL: lọc theo `gameId`, sắp xếp `bestScore` giảm dần, select `guestId` và `bestScore`.
-   - Gọi `RedisRankingService.rebuildGlobal(gameId, entries)`:
-     - Xóa key Redis hiện tại: `lb:global:{gameId}`.
-     - Nếu không có entry → kết thúc (key đã xóa, leaderboard trống).
-     - Nếu có entry → `ZADD` toàn bộ `(score, guestId)` vào sorted set.
-   - Ghi log: `"Rebuilt Redis leaderboard for game {gameId}"`.
-4. Ghi log hoàn tất: `"Redis leaderboard rebuild complete"`.
-
-**Related Tables & Keys:**
-
-| Nguồn / Đích | Tên                          | Mô tả                                      |
-| ------------ | ---------------------------- | ------------------------------------------ |
-| PostgreSQL   | `leaderboard`                | Best score all-time per guest per game     |
-| PostgreSQL   | `games`                      | Chỉ rebuild game có `isActive = true`      |
-| Redis        | `lb:global:{gameId}`         | Sorted set ranking (score → guestId)       |
-
-**Related Fields:**
-
-- `leaderboard.gameId`: ID game.
-- `leaderboard.guestId`: ID guest player.
-- `leaderboard.bestScore`: Điểm cao nhất all-time (dùng làm score trong Redis).
-- `games.isActive`: Chỉ game active mới được rebuild.
+1. Lấy active games qua `GameRegistryService.getActiveGames()`.
+2. Đọc bảng `leaderboard` per game.
+3. `RedisRankingService.rebuildGlobal(gameId, entries)`.
 
 ---
 
-## Realtime vs Scheduled Sync
+## 2. rebuildRedisLeaderboards (cron)
 
-Hệ thống có **hai cơ chế** cập nhật Redis leaderboard:
+**Schedule:** Mỗi ngày 03:00 (`0 3 * * *`)
 
-| Cơ chế    | Trigger                          | Hành vi                                              |
-| --------- | -------------------------------- | ---------------------------------------------------- |
-| Realtime  | `POST /api/game/sync`            | `ZADD` khi score mới > best score hiện tại           |
-| Scheduled | Cron `rebuildRedisLeaderboards`  | Xóa key và rebuild toàn bộ từ PostgreSQL           |
+**Service:** `LeaderboardMaintenanceService`
 
-Realtime sync xử lý hầu hết cập nhật hàng ngày. Cron job đóng vai trò **reconciliation** — đảm bảo Redis khớp với database nếu có sai lệch.
+**Purpose:** Reconciliation — đồng bộ Redis với PostgreSQL nếu có drift.
+
+**Logic:** Gọi `LeaderboardCacheService.warmAll()` (cùng logic warm on boot).
+
+**Related:**
+
+| Nguồn      | Bảng/Key               |
+| ---------- | ---------------------- |
+| PostgreSQL | `leaderboard`, `games` |
+| Redis      | `lb:global:{gameId}`   |
+
+---
+
+## 3. Realtime sync (không phải cron)
+
+**Trigger:** `POST /api/games/:gameId/results`
+
+**Logic:** Sau khi ghi Postgres, `RedisRankingService.updateScore()` (Lua script — chỉ tăng score).
+
+---
+
+## 4. Game Results Partition Maintenance
+
+**Schedule:** Ngày 1 hàng tháng, 04:00 (`0 4 1 * *`)
+
+**Service:** `GameResultsPartitionService`
+
+**Purpose:**
+
+- Tạo partition tháng hiện tại + 2 tháng tới cho `game_results`.
+- Drop partition cũ hơn `GAME_RESULTS_RETENTION_MONTHS` (default 36).
+
+**On boot:** `GameResultsPartitionService.onModuleInit()` đảm bảo partition sắp tới tồn tại.
+
+**Lưu ý:**
+
+- Dedup replay ở bảng `game_replay_keys` — **không** bị xóa khi drop partition.
+- Leaderboard đọc từ bảng `leaderboard` — không phụ thuộc `game_results` cũ.
+
+---
+
+## Cơ chế đọc Leaderboard API
+
+`GET /api/leaderboards` qua `LeaderboardCacheService.getRankings()`:
+
+1. Redis có data → trả từ Redis.
+2. Redis trống → fallback PostgreSQL + warm lại Redis.
 
 ---
 
 ## Monitoring & Logs
 
-Mỗi lần chạy, service ghi log qua NestJS `Logger`:
-
 ```
-[LeaderboardMaintenanceService] Rebuilding Redis leaderboards from database
-[LeaderboardMaintenanceService] Rebuilt Redis leaderboard for game puzzle-quest
-[LeaderboardMaintenanceService] Rebuilt Redis leaderboard for game arcade-rush
-[LeaderboardMaintenanceService] Redis leaderboard rebuild complete
+[LeaderboardCacheService] Warming Redis leaderboards from PostgreSQL
+[LeaderboardCacheService] Warmed Redis leaderboard for game puzzle-quest (N entries)
+[LeaderboardMaintenanceService] Scheduled Redis leaderboard rebuild complete
+[GameResultsPartitionService] Dropped expired partition game_results_2024_01
 ```
-
-Theo dõi log để xác nhận job chạy đúng lịch và rebuild thành công cho từng game.
-
----
-
-## General Notes
-
-- Cron job sử dụng **Prisma ORM** (PostgreSQL) và **ioredis** (Redis sorted sets).
-- Chỉ rebuild leaderboard cho game **active** — game inactive hoặc đã xóa khỏi registry sẽ không được xử lý.
-- Rebuild **không ảnh hưởng** đến dữ liệu PostgreSQL — chỉ đọc từ DB và ghi lại Redis.
-- Thời gian chạy 03:00 được chọn để tránh giờ cao điểm; có thể điều chỉnh cron expression nếu cần.
-- `ScheduleModule.forRoot()` phải được import trong `AppModule` để cron hoạt động.
-- Nếu Redis không khả dụng khi cron chạy, job sẽ throw error — cần monitor và alert.
-- Guest display names **không** được sync qua cron — tên resolve realtime từ bảng `guest_players` khi gọi API leaderboard.
 
 ---
 
 ## Related Documentation
 
-- [Global Leaderboard API](../apis/leaderboard/global-leaderboard.md) — API đọc ranking từ Redis
-- [Sync Game Results API](../apis/game/sync-game-results.md) — API ghi kết quả và cập nhật leaderboard realtime
+- [Leaderboard API](../apis/leaderboard/global-leaderboard.md)
+- [Sync Game Results API](../apis/game/sync-game-results.md)
+- [Environment Variables](../setup/environment-variables.md)

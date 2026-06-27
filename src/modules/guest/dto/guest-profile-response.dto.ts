@@ -1,4 +1,5 @@
 export class GuestProfileResponseDto {
   guestId!: string;
-  name!: null | string;
+  name!: string | null;
+  sessionTokenExpiresAt!: string;
 }
