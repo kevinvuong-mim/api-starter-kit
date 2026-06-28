@@ -30,7 +30,6 @@ describe('game-result.validation', () => {
   const gameId = 'puzzle-quest';
   const guestId = 'guest-1';
   const config = parseGameConfig({
-    maxScore: 50000,
     replaySecret: 'test-secret',
   });
 
@@ -84,18 +83,18 @@ describe('game-result.validation', () => {
     });
   });
 
-  it('rejects playedAt in the future', () => {
-    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    const result = validatePlayedAt(future, config);
-    expect(result).toEqual({
+  it('rejects invalid playedAt values', () => {
+    expect(validatePlayedAt('not-a-date')).toEqual({
       valid: false,
-      reason: ResultRejectionReason.PLAYED_AT_IN_FUTURE,
+      reason: ResultRejectionReason.INVALID_PLAYED_AT,
     });
   });
 
-  it('accepts playedAt values inside the 30-day offline sync window', () => {
+  it('accepts valid playedAt values regardless of age', () => {
     const offlinePlay = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString();
-    expect(validatePlayedAt(offlinePlay, config)).toEqual({ valid: true });
+    const futurePlay = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    expect(validatePlayedAt(offlinePlay)).toEqual({ valid: true });
+    expect(validatePlayedAt(futurePlay)).toEqual({ valid: true });
   });
 
   it('accepts idempotent duplicate for same guest', () => {
@@ -119,7 +118,6 @@ describe('game-result.validation', () => {
     const score = 1000;
     const replayHash = computeReplayHash('test-secret', gameId, score, runSeed);
     const logOnlyConfig = parseGameConfig({
-      maxScore: 50000,
       replaySecret: 'test-secret',
       minDurationMs: 10_000,
     });
@@ -140,7 +138,6 @@ describe('game-result.validation', () => {
     const score = 1000;
     const replayHash = computeReplayHash('test-secret', gameId, score, runSeed);
     const rejectConfig = parseGameConfig({
-      maxScore: 50000,
       replaySecret: 'test-secret',
       minDurationMs: 10_000,
       anomalyMode: 'reject',

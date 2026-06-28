@@ -2,13 +2,13 @@
 
 ## Overview
 
-Task bảo trì monthly partition cho bảng `game_results`. Service đảm bảo app luôn có partition cho tháng hiện tại và 2 tháng tiếp theo, đồng thời xóa partition cũ theo retention window.
+Task bảo trì yearly partition cho bảng `game_results`. Service đảm bảo app luôn có partition cho năm hiện tại và năm kế tiếp. Partition không bị xóa tự động.
 
 **Service:** `GameResultsPartitionService`
 
 **Module:** `GameModule`
 
-**Schedule:** Ngày 1 hàng tháng, 04:00 (`0 4 1 * *`)
+**Schedule:** Ngày 1 tháng 1 hàng năm, 04:00 (`0 4 1 1 *`)
 
 ---
 
@@ -20,18 +20,18 @@ Task bảo trì monthly partition cho bảng `game_results`. Service đảm bả
 
 Mục tiêu:
 
-- Tạo partition cho tháng hiện tại.
-- Tạo trước partition cho 2 tháng tiếp theo.
-- Giảm nguy cơ insert rơi vào `game_results_default` sau deploy hoặc khi bước sang tháng mới.
+- Tạo partition cho năm hiện tại.
+- Tạo trước partition cho năm kế tiếp.
+- Đảm bảo insert có partition hợp lệ trước khi app nhận request.
 
 ### Cron
 
-`maintainPartitions()` chạy ngày 1 hàng tháng lúc 04:00.
+`maintainPartitions()` chạy ngày 1 tháng 1 lúc 04:00.
 
 Logic:
 
-1. `ensureUpcomingPartitions()` tạo partition tháng hiện tại + 2 tháng tới.
-2. `dropExpiredPartitions()` xóa partition cũ hơn `GAME_RESULTS_RETENTION_MONTHS`.
+1. `ensureUpcomingPartitions()` tạo partition năm hiện tại + năm kế tiếp.
+2. Không drop partition cũ.
 
 ---
 
@@ -40,32 +40,27 @@ Logic:
 Partition được đặt theo format:
 
 ```text
-game_results_YYYY_MM
+game_results_YYYY
 ```
 
 Ví dụ:
 
-- `game_results_2026_06`
-- `game_results_2026_07`
-- `game_results_2026_08`
+- `game_results_2026`
+- `game_results_2027`
 
-Mỗi partition chứa rows theo `createdAt` trong khoảng `[monthStart, nextMonthStart)`.
+Mỗi partition chứa rows theo `createdAt` trong khoảng `[yearStart, nextYearStart)`.
 
 ---
 
-## Default Partition Flow
+## Partition Creation Flow
 
-Khi tạo partition mới, service xử lý cả trường hợp `game_results_default` đã có rows thuộc tháng đó.
+Khi tạo partition mới, service tạo trực tiếp yearly partition dưới `game_results`.
 
 Flow trong transaction:
 
 1. Lấy PostgreSQL advisory lock `902412`.
 2. Nếu partition đã tồn tại thì bỏ qua.
-3. Detach `game_results_default`.
-4. Tạo partition tháng mới.
-5. Move rows matching range từ `game_results_default` về parent `game_results`.
-6. Xóa rows đã move khỏi `game_results_default`.
-7. Attach lại `game_results_default` làm default partition.
+3. Tạo partition năm mới.
 
 Advisory lock giúp serialize maintenance giữa nhiều app instances và tránh overlap giữa startup task với cron.
 
@@ -73,38 +68,28 @@ Advisory lock giúp serialize maintenance giữa nhiều app instances và trán
 
 ## Retention
 
-Retention đọc từ `APP_CONFIG.gameResultsRetentionMonths`.
-
-Biến môi trường:
-
-```env
-GAME_RESULTS_RETENTION_MONTHS=36
-```
-
-Mặc định: `36` tháng.
-
-`dropExpiredPartitions()` scan child tables của `game_results`, chỉ xử lý table có tên match `game_results_YYYY_MM`, bỏ qua `game_results_default`, và drop partition có tháng nhỏ hơn cutoff.
+Không có retention cron cho `game_results`. Các partition yearly được giữ lại cho tới khi operator chủ động archive/drop bằng migration hoặc task thủ công.
 
 ---
 
 ## Data Safety Notes
 
-- Chỉ bảng `game_results` bị retention theo tháng.
-- Bảng `game_replay_keys` không bị xóa khi drop partition, nên replay dedup vẫn giữ hiệu lực.
+- Bảng `game_results` không bị drop partition tự động.
+- Replay dedup tra trực tiếp từ `game_results(gameId, replayHash)`, nên phụ thuộc vào việc giữ partition lịch sử.
 - Bảng `leaderboard` là source of truth cho best score, không phụ thuộc vào `game_results` cũ.
-- Nếu partition chưa kịp tạo, rows vẫn có thể vào `game_results_default`; lần maintenance sau sẽ move rows về partition đúng.
+- Không có default partition. Nếu partition phù hợp với `createdAt` chưa tồn tại, PostgreSQL sẽ reject insert.
 
 ---
 
 ## Monitoring & Logs
 
-Log khi drop partition cũ:
+Log khi tạo/đảm bảo partition:
 
 ```text
-[GameResultsPartitionService] Dropped expired partition game_results_2024_01
+[GameResultsPartitionService] Ensured game_results yearly partition game_results_2026
 ```
 
-Không có log riêng khi tạo partition thành công; kiểm tra trực tiếp trong PostgreSQL nếu cần.
+Kiểm tra trực tiếp trong PostgreSQL nếu cần.
 
 ```sql
 SELECT c.relname AS partition_name

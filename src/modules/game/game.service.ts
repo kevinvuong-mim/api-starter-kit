@@ -4,7 +4,7 @@ import { GameRepository } from '@/modules/game/game.repository';
 import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
-import { validateGameResult, ResultRejectionReason } from '@/modules/game/game-result.validation';
+import { validateGameResult } from '@/modules/game/game-result.validation';
 import {
   SyncGameResultItemResponseDto,
   SyncGameResultsResponseDto,
@@ -25,11 +25,11 @@ export class GameService {
     guestId: string,
     results: GameResultDto[],
   ): Promise<SyncGameResultsResponseDto> {
-    const game = await this.gameRegistryService.assertActiveGame(gameId);
+    const game = await this.gameRegistryService.assertGameExists(gameId);
     const config = this.gameRegistryService.getConfig(game);
 
     const replayHashes = results.map((result) => result.replayHash);
-    const existingRows = await this.gameRepository.findReplayKeys(gameId, replayHashes);
+    const existingRows = await this.gameRepository.findReplayResults(gameId, replayHashes);
     const existingByHash = new Map(existingRows.map((row) => [row.replayHash, row]));
 
     const responseByHash = new Map<string, SyncGameResultItemResponseDto>();
@@ -66,38 +66,13 @@ export class GameService {
     let hasInserted = false;
     if (toInsert.length > 0) {
       const inserted = await this.gameRepository.insertResultsBatch(gameId, guestId, toInsert);
-      const insertedByHash = new Set(inserted.map((row) => row.replayHash));
       hasInserted = inserted.length > 0;
 
-      // Rows that lost an INSERT ... ON CONFLICT race need their real owner re-read so a
-      // concurrent retry from the same guest+score is treated as idempotent (accepted),
-      // not blindly rejected as a duplicate.
-      const conflictedHashes = toInsert
-        .filter((result) => !insertedByHash.has(result.replayHash))
-        .map((result) => result.replayHash);
-
-      const conflictByHash = new Map(
-        conflictedHashes.length > 0
-          ? (await this.gameRepository.findReplayKeys(gameId, conflictedHashes)).map((row) => [
-              row.replayHash,
-              row,
-            ])
-          : [],
-      );
-
       for (const result of toInsert) {
-        if (insertedByHash.has(result.replayHash)) {
-          responseByHash.set(result.replayHash, {
-            replayHash: result.replayHash,
-            status: 'accepted',
-          });
-          continue;
-        }
-
-        responseByHash.set(
-          result.replayHash,
-          this.resolveConflictOutcome(result, guestId, conflictByHash.get(result.replayHash)),
-        );
+        responseByHash.set(result.replayHash, {
+          replayHash: result.replayHash,
+          status: 'accepted',
+        });
       }
     }
 
@@ -128,30 +103,6 @@ export class GameService {
     }
 
     return { results: itemResponses, accepted, rejected, bestScore };
-  }
-
-  private resolveConflictOutcome(
-    result: GameResultDto,
-    guestId: string,
-    conflict: { guestId: string; score: number } | undefined,
-  ): SyncGameResultItemResponseDto {
-    if (conflict && conflict.guestId === guestId && conflict.score === result.score) {
-      return { replayHash: result.replayHash, status: 'accepted' };
-    }
-
-    if (conflict && conflict.guestId === guestId && conflict.score !== result.score) {
-      return {
-        replayHash: result.replayHash,
-        status: 'rejected',
-        reason: ResultRejectionReason.SCORE_MISMATCH,
-      };
-    }
-
-    return {
-      replayHash: result.replayHash,
-      status: 'rejected',
-      reason: ResultRejectionReason.DUPLICATE_REPLAY,
-    };
   }
 
   private logAcceptedResultAnomalies(

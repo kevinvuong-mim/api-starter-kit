@@ -23,12 +23,10 @@ describeIfDb('Platform flows (e2e)', () => {
       create: {
         id: 'puzzle-quest',
         name: 'Puzzle Quest',
-        isActive: true,
-        config: { maxScore: 50000, replaySecret: 'puzzle-quest-dev-secret' },
+        config: { replaySecret: 'puzzle-quest-dev-secret' },
       },
       update: {
-        isActive: true,
-        config: { maxScore: 50000, replaySecret: 'puzzle-quest-dev-secret' },
+        config: { replaySecret: 'puzzle-quest-dev-secret' },
       },
     });
 
@@ -56,7 +54,7 @@ describeIfDb('Platform flows (e2e)', () => {
     await prisma.$disconnect();
   });
 
-  it('creates guest with installId + installSecret and relinks securely', async () => {
+  it('creates one guest per installId and returns the same guest on re-init', async () => {
     const installId = randomUUID();
 
     const createRes = await request(app.getHttpServer())
@@ -65,29 +63,21 @@ describeIfDb('Platform flows (e2e)', () => {
       .expect(201);
 
     expect(createRes.body.data.relinked).toBe(false);
-    expect(createRes.body.data.installSecret).toBeDefined();
+    expect(createRes.body.data.sessionToken).toBeUndefined();
+    expect(createRes.body.data.installSecret).toBeUndefined();
 
-    const { installSecret, guestId, sessionToken } = createRes.body.data;
-
-    await request(app.getHttpServer()).post('/api/guest/init').send({ installId }).expect(401);
+    const { guestId } = createRes.body.data;
 
     const relinkRes = await request(app.getHttpServer())
       .post('/api/guest/init')
-      .send({ installId, installSecret })
+      .send({ installId })
       .expect(201);
 
     expect(relinkRes.body.data.relinked).toBe(true);
     expect(relinkRes.body.data.guestId).toBe(guestId);
-    expect(relinkRes.body.data.installSecret).toBeUndefined();
-
-    await request(app.getHttpServer())
-      .get('/api/guest/me')
-      .set('Authorization', `Bearer ${sessionToken}`)
-      .expect(401);
 
     const profileRes = await request(app.getHttpServer())
-      .get('/api/guest/me')
-      .set('Authorization', `Bearer ${relinkRes.body.data.sessionToken}`)
+      .get(`/api/guest/me?guestId=${guestId}`)
       .expect(200);
 
     expect(profileRes.body.data).toMatchObject({
@@ -104,15 +94,15 @@ describeIfDb('Platform flows (e2e)', () => {
       .send({ installId })
       .expect(201);
 
-    const token = initRes.body.data.sessionToken;
+    const guestId = initRes.body.data.guestId;
     const runSeed = 'e2e-run-1';
     const score = 1500;
     const replayHash = buildValidReplayHash('puzzle-quest', score, runSeed);
 
     const syncRes = await request(app.getHttpServer())
       .post('/api/games/puzzle-quest/results')
-      .set('Authorization', `Bearer ${token}`)
       .send({
+        guestId,
         results: [
           {
             score,
@@ -135,8 +125,8 @@ describeIfDb('Platform flows (e2e)', () => {
 
     const retryRes = await request(app.getHttpServer())
       .post('/api/games/puzzle-quest/results')
-      .set('Authorization', `Bearer ${token}`)
       .send({
+        guestId,
         results: [
           {
             score,
@@ -156,12 +146,12 @@ describeIfDb('Platform flows (e2e)', () => {
 
   it('rejects invalid replay signature', async () => {
     const initRes = await request(app.getHttpServer()).post('/api/guest/init').send({}).expect(201);
-    const token = initRes.body.data.sessionToken;
+    const guestId = initRes.body.data.guestId;
 
     const syncRes = await request(app.getHttpServer())
       .post('/api/games/puzzle-quest/results')
-      .set('Authorization', `Bearer ${token}`)
       .send({
+        guestId,
         results: [
           {
             score: 999,

@@ -34,7 +34,7 @@ export class LeaderboardCacheService implements OnModuleInit {
   async warmAll(): Promise<void> {
     this.logger.log('Warming Redis leaderboards from PostgreSQL');
 
-    const games = await this.gameRegistryService.getActiveGames();
+    const games = await this.gameRegistryService.getGames();
 
     for (const game of games) {
       const entries = await this.gameRepository.getAllLeaderboardEntries(game.id);

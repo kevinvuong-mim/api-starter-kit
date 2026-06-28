@@ -6,28 +6,25 @@ describe('GameService', () => {
   const gameId = 'puzzle-quest';
   const guestId = 'guest-1';
   const config: ParsedGameConfig = {
-    maxScore: 50000,
     anomalyMode: 'log',
     replaySecret: 'test-secret',
-    playedAtMaxAgeDays: 30,
-    playedAtFutureSkewMs: 5 * 60 * 1000,
   };
 
   function buildService(
     overrides: {
-      findReplayKeys?: jest.Mock;
+      findReplayResults?: jest.Mock;
       insertResultsBatch?: jest.Mock;
       getBestScoreForGuest?: jest.Mock;
       updateScore?: jest.Mock;
     } = {},
   ) {
     const gameRepository = {
-      findReplayKeys: overrides.findReplayKeys ?? jest.fn().mockResolvedValue([]),
+      findReplayResults: overrides.findReplayResults ?? jest.fn().mockResolvedValue([]),
       insertResultsBatch: overrides.insertResultsBatch ?? jest.fn().mockResolvedValue([]),
       getBestScoreForGuest: overrides.getBestScoreForGuest ?? jest.fn().mockResolvedValue(0),
     };
     const gameRegistryService = {
-      assertActiveGame: jest.fn().mockResolvedValue({ id: gameId, config }),
+      assertGameExists: jest.fn().mockResolvedValue({ id: gameId, config }),
       getConfig: jest.fn().mockReturnValue(config),
     };
     const redisRankingService = {
@@ -52,7 +49,7 @@ describe('GameService', () => {
     const runSeed = 'run-1';
     const replayHash = computeReplayHash(config.replaySecret!, gameId, score, runSeed);
     const { gameRepository, service } = buildService({
-      findReplayKeys: jest.fn().mockResolvedValue([{ gameId, guestId, replayHash, score }]),
+      findReplayResults: jest.fn().mockResolvedValue([{ gameId, guestId, replayHash, score }]),
       getBestScoreForGuest: jest.fn().mockResolvedValue(score),
     });
 

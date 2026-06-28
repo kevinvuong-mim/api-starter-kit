@@ -10,7 +10,6 @@ datasource db {
 model Game {
   id        String   @id
   name      String
-  isActive  Boolean  @default(true)
   config    Json?
   createdAt DateTime @default(now())
 
@@ -21,13 +20,10 @@ model Game {
 }
 
 model GuestPlayer {
-  id                    String   @id @default(uuid())
-  installId             String?  @unique
-  installSecretHash     String?
-  sessionTokenHash      String   @unique
-  sessionTokenExpiresAt DateTime
-  name                  String?
-  createdAt             DateTime @default(now())
+  id        String   @id @default(uuid())
+  installId String?  @unique
+  name      String?
+  createdAt DateTime @default(now())
 
   gameResults GameResult[]
   leaderboard Leaderboard[]
@@ -35,21 +31,7 @@ model GuestPlayer {
   @@map("guest_players")
 }
 
-/// Deduplication index for replay hashes — survives partition drops on game_results.
-model GameReplayKey {
-  gameId     String
-  replayHash String
-  guestId    String
-  score      Int
-  createdAt  DateTime @default(now())
-
-  @@id([gameId, replayHash])
-  @@index([guestId])
-  @@index([createdAt])
-  @@map("game_replay_keys")
-}
-
-/// Partitioned by month on createdAt (managed via SQL migrations + maintenance cron).
+/// Partitioned by year on createdAt (managed via SQL migrations + maintenance cron).
 model GameResult {
   id         String    @default(uuid())
   gameId     String

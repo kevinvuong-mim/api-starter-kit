@@ -1,4 +1,4 @@
-import { isScoreWithinMax, ParsedGameConfig } from '@/modules/game/game-config.validator';
+import { ParsedGameConfig } from '@/modules/game/game-config.validator';
 import { RUN_SEED_METADATA_KEY, verifyReplayHash } from '@/modules/game/game-replay-hmac.util';
 
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/i;
@@ -9,11 +9,8 @@ export enum ResultRejectionReason {
   INVALID_REPLAY_HASH_FORMAT = 'INVALID_REPLAY_HASH_FORMAT',
   INVALID_REPLAY_SIGNATURE = 'INVALID_REPLAY_SIGNATURE',
   MISSING_RUN_SEED = 'MISSING_RUN_SEED',
-  SCORE_EXCEEDS_MAX = 'SCORE_EXCEEDS_MAX',
   SCORE_MISMATCH = 'SCORE_MISMATCH',
   INVALID_PLAYED_AT = 'INVALID_PLAYED_AT',
-  PLAYED_AT_IN_FUTURE = 'PLAYED_AT_IN_FUTURE',
-  PLAYED_AT_TOO_OLD = 'PLAYED_AT_TOO_OLD',
   MIN_DURATION = 'MIN_DURATION',
   SCORE_RATE = 'SCORE_RATE',
 }
@@ -42,10 +39,7 @@ export function validateReplayHashFormat(replayHash: string): ResultValidationOu
   return { valid: true };
 }
 
-export function validatePlayedAt(
-  playedAt: string | undefined,
-  config: Pick<ParsedGameConfig, 'playedAtMaxAgeDays' | 'playedAtFutureSkewMs'>,
-): ResultValidationOutcome {
+export function validatePlayedAt(playedAt: string | undefined): ResultValidationOutcome {
   if (!playedAt) {
     return { valid: true };
   }
@@ -53,16 +47,6 @@ export function validatePlayedAt(
   const date = new Date(playedAt);
   if (Number.isNaN(date.getTime())) {
     return { valid: false, reason: ResultRejectionReason.INVALID_PLAYED_AT };
-  }
-
-  const now = Date.now();
-  if (date.getTime() > now + config.playedAtFutureSkewMs) {
-    return { valid: false, reason: ResultRejectionReason.PLAYED_AT_IN_FUTURE };
-  }
-
-  const maxAgeMs = config.playedAtMaxAgeDays * 24 * 60 * 60 * 1000;
-  if (date.getTime() < now - maxAgeMs) {
-    return { valid: false, reason: ResultRejectionReason.PLAYED_AT_TOO_OLD };
   }
 
   return { valid: true };
@@ -132,13 +116,9 @@ export function validateGameResult(
     return formatResult;
   }
 
-  const playedAtResult = validatePlayedAt(input.playedAt, config);
+  const playedAtResult = validatePlayedAt(input.playedAt);
   if (!playedAtResult.valid) {
     return playedAtResult;
-  }
-
-  if (!isScoreWithinMax(input.score, config.maxScore)) {
-    return { valid: false, reason: ResultRejectionReason.SCORE_EXCEEDS_MAX };
   }
 
   const signatureResult = validateReplaySignature(gameId, input, config.replaySecret);

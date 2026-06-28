@@ -2,7 +2,7 @@
 
 ## Overview
 
-API đồng bộ kết quả game offline lên server theo batch. Hỗ trợ tối đa 50 kết quả mỗi request, idempotent qua `replayHash`, HMAC anti-cheat, validate `maxScore` theo game config.
+API đồng bộ kết quả game offline lên server theo batch. Hỗ trợ tối đa 50 kết quả mỗi request, idempotent qua `replayHash`, HMAC anti-cheat.
 
 **Base URL**: `/api/games`
 
@@ -18,12 +18,13 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 
 **Endpoint**: `POST /api/games/:gameId/results`
 
-**Authentication**: Bearer session token
+**Authentication**: Không yêu cầu. Client gửi `guestId` trong body để định danh guest.
 
 #### Request Body
 
 ```json
 {
+  "guestId": "550e8400-e29b-41d4-a716-446655440000",
   "results": [
     {
       "score": 1500,
@@ -40,10 +41,11 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 
 | Field                | Type   | Required | Validation                              |
 | -------------------- | ------ | -------- | --------------------------------------- |
+| guestId              | string | Yes      | UUID guest đã nhận từ `/guest/init`     |
 | results              | array  | Yes      | Min: 1, Max: 50 items                   |
-| results[].score      | number | Yes      | Integer, Min: 0, ≤ `game.config.maxScore` |
+| results[].score      | number | Yes      | Integer, Min: 0 |
 | results[].replayHash | string | Yes      | HMAC-SHA256 hex (64 chars)              |
-| results[].playedAt   | string | No       | ISO 8601 strict; skew max 5 phút tương lai, mặc định tối đa 30 ngày quá khứ |
+| results[].playedAt   | string | No       | ISO 8601 strict |
 | results[].metadata   | object | No       | Flat object; tối đa 10 keys, 2048 bytes; value là string/number/boolean/null |
 
 `metadata.runSeed` là bắt buộc khi game có `config.replaySecret`.
@@ -84,30 +86,26 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 |--------|-------------|
 | `DUPLICATE_REPLAY` | Hash đã thuộc guest khác |
 | `SCORE_MISMATCH` | Retry cùng hash nhưng score khác |
-| `SCORE_EXCEEDS_MAX` | Vượt `maxScore` |
 | `INVALID_REPLAY_SIGNATURE` | HMAC không khớp |
 | `MISSING_RUN_SEED` | Thiếu `metadata.runSeed` |
 | `MISSING_REPLAY_HASH` | `replayHash` rỗng |
 | `INVALID_REPLAY_HASH_FORMAT` | Format hash sai |
 | `INVALID_PLAYED_AT` | `playedAt` không parse được |
-| `PLAYED_AT_IN_FUTURE` | `playedAt` quá xa tương lai |
-| `PLAYED_AT_TOO_OLD` | `playedAt` quá cũ |
 
 **Request-level Error Responses**
 
-- **400 Bad Request**: DTO validation lỗi (`results` không phải array, batch rỗng/quá 50 items, `score` không phải integer, metadata sai format, ...) hoặc `gameId` tồn tại nhưng `isActive=false`
-- **401 Unauthorized**: Thiếu, sai, hoặc hết hạn session token
-- **404 Not Found**: `gameId` không tồn tại
+- **400 Bad Request**: DTO validation lỗi (`guestId` sai format, `results` không phải array, batch rỗng/quá 50 items, `score` không phải integer, metadata sai format, ...)
+- **404 Not Found**: `gameId` hoặc `guestId` không tồn tại
 - **429 Too Many Requests**: Vượt rate limit theo IP hoặc theo guest
 
 ---
 
 ## Business Logic
 
-1. `GuestAuthGuard` resolve guest từ token (1 DB query).
+1. Resolve guest từ `guestId` (1 DB query).
 2. `GuestRateLimitGuard` — per-guest Redis limit.
-3. Validate từng result (HMAC, maxScore, playedAt, duplicate).
-4. Transaction: `INSERT ... ON CONFLICT DO NOTHING RETURNING` trên `game_replay_keys` → insert `game_results` chỉ cho rows mới.
+3. Validate từng result (HMAC, playedAt, duplicate).
+4. Tra duplicate theo `game_results(gameId, replayHash)`, rồi insert rows mới vào `game_results`.
 5. Upsert `leaderboard` (`GREATEST`).
 6. Update Redis với authoritative `bestScore` sau khi đọc lại từ PostgreSQL.
 7. Trả `results[]` theo **thứ tự input** + aggregates.
@@ -116,21 +114,13 @@ Xem [Replay Hash HMAC](./replay-hash-hmac.md) cho chi tiết client implementati
 
 ## Default Game Config
 
-| Game | maxScore | replaySecret |
-|------|----------|--------------|
-| puzzle-quest | 50000 | puzzle-quest-dev-secret |
-| arcade-rush | 100000 | arcade-rush-dev-secret |
-
-Code default khi `games.config` thiếu field:
-
-| Field | Default |
-|-------|---------|
-| `maxScore` | `100000` |
-| `playedAtMaxAgeDays` | `30` |
-| `playedAtFutureSkewMs` | `300000` |
+| Game | replaySecret |
+|------|--------------|
+| puzzle-quest | puzzle-quest-dev-secret |
+| arcade-rush | arcade-rush-dev-secret |
 
 ```sql
-UPDATE games SET config = '{"maxScore": 50000, "replaySecret": "your-secret"}'::jsonb
+UPDATE games SET config = '{"replaySecret": "your-secret"}'::jsonb
 WHERE id = 'puzzle-quest';
 ```
 

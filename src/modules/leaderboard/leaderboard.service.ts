@@ -18,7 +18,7 @@ export class LeaderboardService {
     query: LeaderboardQueryDto,
     guestId?: string,
   ): Promise<LeaderboardResponseDto> {
-    await this.gameRegistryService.assertActiveGame(query.gameId);
+    await this.gameRegistryService.assertGameExists(query.gameId);
 
     const page = query.page;
     const limit = Math.min(query.limit, 100);

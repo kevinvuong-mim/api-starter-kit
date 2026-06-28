@@ -2,7 +2,7 @@
 
 ## Overview
 
-API lấy bảng xếp hạng all-time theo game. Ranking ưu tiên Redis sorted set, nhưng chỉ tin Redis khi số lượng entry khớp PostgreSQL; nếu Redis trống hoặc drift thì rebuild từ PostgreSQL rồi trả kết quả. Tên guest resolve từ database. Hỗ trợ pagination và `myRank` qua optional Bearer token.
+API lấy bảng xếp hạng all-time theo game. Ranking ưu tiên Redis sorted set, nhưng chỉ tin Redis khi số lượng entry khớp PostgreSQL; nếu Redis trống hoặc drift thì rebuild từ PostgreSQL rồi trả kết quả. Tên guest resolve từ database. Hỗ trợ pagination và `myRank` qua optional `guestId`.
 
 **Base URL**: `/api/leaderboards`
 
@@ -14,7 +14,7 @@ API lấy bảng xếp hạng all-time theo game. Ranking ưu tiên Redis sorted
 
 **Endpoint**: `GET /api/leaderboards`
 
-**Authentication**: Optional session token (cần để lấy `myRank`)
+**Authentication**: Không yêu cầu. Gửi optional `guestId` để lấy `myRank`.
 
 **Rate Limit**: 100 requests / phút / IP
 
@@ -22,15 +22,10 @@ API lấy bảng xếp hạng all-time theo game. Ranking ưu tiên Redis sorted
 
 | Parameter | Type   | Required | Default | Validation              | Description              |
 | --------- | ------ | -------- | ------- | ----------------------- | ------------------------ |
-| gameId    | string | Yes      | —       | Game tồn tại, active    | ID của game              |
+| gameId    | string | Yes      | —       | Game tồn tại            | ID của game              |
+| guestId   | string | No       | —       | UUID                    | Guest cần lấy `myRank`   |
 | page      | number | No       | 1       | Min: 1                  | Trang (1-based)          |
 | limit     | number | No       | 100     | Min: 1, Max: 100        | Số entries mỗi trang     |
-
-#### Headers (optional)
-
-```
-Authorization: Bearer <sessionToken>
-```
 
 #### Response
 
@@ -71,36 +66,35 @@ Authorization: Bearer <sessionToken>
 | top[].guestId         | string       | UUID guest                                     |
 | top[].name            | string\|null | Tên hiển thị                                   |
 | top[].score           | number       | Best score all-time                            |
-| myRank                | number\|null | Rank guest (khi có valid Bearer token)         |
+| myRank                | number\|null | Rank guest (khi có `guestId`)                  |
 | pagination            | object       | `page`, `limit`, `total`, `totalPages`         |
 
 **myRank behavior**:
 
-- Không có `Authorization` → `myRank: null`
+- Không có `guestId` → `myRank: null`
 - Guest trong `top` → rank từ array
 - Guest ngoài top → `LeaderboardCacheService.getPlayerRank()` (Redis hoặc PG fallback)
-- Token invalid/expired → bỏ qua silently (`OptionalGuestAuthGuard`)
+- `guestId` không tồn tại hoặc chưa có điểm → `myRank: null`
 
 #### cURL Examples
 
 ```bash
 curl "http://localhost:3000/api/leaderboards?gameId=puzzle-quest"
 
-curl "http://localhost:3000/api/leaderboards?gameId=puzzle-quest&page=2&limit=50" \
-  -H "Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7"
+curl "http://localhost:3000/api/leaderboards?gameId=puzzle-quest&page=2&limit=50&guestId=550e8400-e29b-41d4-a716-446655440000"
 ```
 
 ---
 
 ## Business Logic
 
-1. `GameRegistryService.assertActiveGame(gameId)`.
+1. `GameRegistryService.assertGameExists(gameId)`.
 2. `LeaderboardCacheService.getRankings()`:
    - Redis có data và `ZCARD` khớp count PostgreSQL → đọc `ZREVRANGE`.
    - Redis trống hoặc count lệch PostgreSQL → rebuild Redis từ bảng `leaderboard`, rồi đọc lại từ Redis.
    - PostgreSQL không có entry → trả leaderboard rỗng và xóa Redis key nếu cần.
 3. Batch resolve guest names từ `guest_players`.
-4. Resolve `myRank` nếu có guest từ token.
+4. Resolve `myRank` nếu có `guestId`.
 
 ### Data Sources
 
@@ -112,7 +106,7 @@ curl "http://localhost:3000/api/leaderboards?gameId=puzzle-quest&page=2&limit=50
 
 ### Cache Warm
 
-- **On boot**: `LeaderboardCacheService.onModuleInit()` warm tất cả active games.
+- **On boot**: `LeaderboardCacheService.onModuleInit()` warm tất cả games.
 - **Daily cron** (03:00): `LeaderboardMaintenanceService` gọi lại `warmAll()`.
 
 ---
@@ -135,9 +129,9 @@ curl "http://localhost:3000/api/leaderboards?gameId=puzzle-quest&page=2&limit=50
 
 ### Problem: `myRank` null
 
-**Cause**: Không gửi token, token hết hạn, hoặc guest chưa có điểm.
+**Cause**: Không gửi `guestId`, `guestId` không tồn tại, hoặc guest chưa có điểm.
 
-**Solution**: Gửi valid Bearer token; kiểm tra sync `accepted > 0`.
+**Solution**: Gửi `guestId` từ `/guest/init`; kiểm tra sync `accepted > 0`.
 
 ---
 

@@ -14,26 +14,20 @@ Mỗi game có `replaySecret` trong `games.config`. Client dùng secret này (ob
 
 ```json
 {
-  "maxScore": 50000,
   "replaySecret": "your-per-game-secret",
-  "anomalyMode": "log",
-  "playedAtMaxAgeDays": 30,
-  "playedAtFutureSkewMs": 300000
+  "anomalyMode": "log"
 }
 ```
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `maxScore` | `100000` | Điểm tối đa hợp lệ |
 | `replaySecret` | — | Bắt buộc cho production; nếu thiếu, server chỉ validate format hash |
 | `anomalyMode` | `log` | `log` chỉ ghi nhận anomaly; `reject` từ chối `minDurationMs` / `maxScorePerMinute` |
-| `playedAtMaxAgeDays` | `30` | Tuổi tối đa của `playedAt` |
-| `playedAtFutureSkewMs` | `300000` (5 phút) | Cho phép clock skew về tương lai |
 
 Seed dev:
 
-- `puzzle-quest` → `maxScore: 50000`, `replaySecret: puzzle-quest-dev-secret`
-- `arcade-rush` → `maxScore: 100000`, `replaySecret: arcade-rush-dev-secret`
+- `puzzle-quest` → `replaySecret: puzzle-quest-dev-secret`
+- `arcade-rush` → `replaySecret: arcade-rush-dev-secret`
 
 ---
 
@@ -98,11 +92,10 @@ export function computeReplayHash(
 ## Server Validation Order
 
 1. `replayHash` format (64-char hex)
-2. `playedAt` skew (nếu có)
-3. `score ≤ maxScore`
-4. HMAC verify (nếu `replaySecret` configured)
-5. Anomaly policy nếu `anomalyMode = "reject"`
-6. Duplicate / score mismatch (`game_replay_keys`)
+2. `playedAt` parse (nếu có)
+3. HMAC verify (nếu `replaySecret` configured)
+4. Anomaly policy nếu `anomalyMode = "reject"`
+5. Duplicate / score mismatch (`game_results`)
 
 ---
 
@@ -114,12 +107,9 @@ export function computeReplayHash(
 | `INVALID_REPLAY_SIGNATURE` | HMAC không khớp |
 | `MISSING_REPLAY_HASH` | `replayHash` rỗng |
 | `INVALID_REPLAY_HASH_FORMAT` | Không phải 64-char hex |
-| `SCORE_EXCEEDS_MAX` | Vượt `maxScore` |
 | `SCORE_MISMATCH` | Cùng guest retry cùng hash nhưng score khác |
 | `DUPLICATE_REPLAY` | Hash đã thuộc guest khác |
 | `INVALID_PLAYED_AT` | `playedAt` không parse được |
-| `PLAYED_AT_IN_FUTURE` | `playedAt` quá xa tương lai |
-| `PLAYED_AT_TOO_OLD` | `playedAt` quá cũ |
 | `MIN_DURATION` | Duration thấp hơn `minDurationMs` khi `anomalyMode = "reject"` |
 | `SCORE_RATE` | Score/minute vượt `maxScorePerMinute` khi `anomalyMode = "reject"` |
 
@@ -130,6 +120,7 @@ export function computeReplayHash(
 - `runSeed` phải **cố định per local play** — regenerate khi retry cùng lượt chơi.
 - `replayHash` thay đổi nếu đổi `score` hoặc `runSeed`.
 - Client flush queue theo thứ tự; server trả `results[]` per-item để client biết item nào drop / retry.
+- Dedup hiện tra trực tiếp từ `game_results(gameId, replayHash)`, vì các partition yearly không bị xóa tự động.
 
 ---
 

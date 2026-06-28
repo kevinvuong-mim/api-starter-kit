@@ -1,6 +1,6 @@
 # Scheduled Maintenance Tasks
 
-Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và data retention.
+Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và partition maintenance.
 
 **Modules:** `LeaderboardModule`, `GameModule` (`ScheduleModule.forRoot()` trong `app.module.ts`)
 
@@ -17,7 +17,7 @@ Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và 
 
 **Logic:**
 
-1. Lấy active games qua `GameRegistryService.getActiveGames()`.
+1. Lấy games qua `GameRegistryService.getGames()`.
 2. Đọc bảng `leaderboard` per game.
 3. `RedisRankingService.rebuildGlobal(gameId, entries)`.
 
@@ -52,7 +52,7 @@ Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và 
 
 ## 4. Game Results Partition Maintenance
 
-**Schedule:** Ngày 1 hàng tháng, 04:00 (`0 4 1 * *`)
+**Schedule:** Ngày 1 tháng 1 hằng năm, 04:00 (`0 4 1 1 *`)
 
 **Service:** `GameResultsPartitionService`
 
@@ -60,14 +60,14 @@ Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và 
 
 **Purpose:**
 
-- Tạo partition tháng hiện tại + 2 tháng tới cho `game_results`.
-- Drop partition cũ hơn `GAME_RESULTS_RETENTION_MONTHS` (default 36).
+- Tạo partition năm hiện tại + năm kế tiếp cho `game_results`.
+- Không drop partition cũ.
 
 **On boot:** `GameResultsPartitionService.onModuleInit()` đảm bảo partition sắp tới tồn tại.
 
 **Lưu ý:**
 
-- Dedup replay ở bảng `game_replay_keys` — **không** bị xóa khi drop partition.
+- Dedup replay tra trực tiếp từ `game_results(gameId, replayHash)`.
 - Leaderboard đọc từ bảng `leaderboard` — không phụ thuộc `game_results` cũ.
 
 ---
@@ -89,7 +89,7 @@ Tài liệu mô tả các cron job và startup tasks liên quan leaderboard và 
 [LeaderboardCacheService] Warming Redis leaderboards from PostgreSQL
 [LeaderboardCacheService] Warmed Redis leaderboard for game puzzle-quest (N entries)
 [LeaderboardMaintenanceService] Scheduled Redis leaderboard rebuild complete
-[GameResultsPartitionService] Dropped expired partition game_results_2024_01
+[GameResultsPartitionService] Ensured game_results yearly partition game_results_2026
 ```
 
 ---

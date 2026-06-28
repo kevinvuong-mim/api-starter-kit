@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { GameReplayKey, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';
 
-export interface InsertedReplayKey {
+export interface ReplayResultOwner {
   replayHash: string;
   guestId: string;
   score: number;
@@ -20,15 +20,21 @@ export interface LeaderboardPageEntry {
 export class GameRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findReplayKeys(gameId: string, replayHashes: string[]): Promise<GameReplayKey[]> {
+  findReplayResults(gameId: string, replayHashes: string[]): Promise<ReplayResultOwner[]> {
     if (replayHashes.length === 0) {
       return Promise.resolve([]);
     }
 
-    return this.prisma.gameReplayKey.findMany({
+    return this.prisma.gameResult.findMany({
       where: {
         gameId,
         replayHash: { in: replayHashes },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        replayHash: true,
+        guestId: true,
+        score: true,
       },
     });
   }
@@ -37,44 +43,30 @@ export class GameRepository {
     gameId: string,
     guestId: string,
     results: GameResultDto[],
-  ): Promise<InsertedReplayKey[]> {
+  ): Promise<ReplayResultOwner[]> {
     if (results.length === 0) {
       return [];
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const insertedKeys: InsertedReplayKey[] = [];
+      await tx.gameResult.createMany({
+        data: results.map((input) => ({
+          gameId,
+          guestId,
+          score: input.score,
+          replayHash: input.replayHash,
+          playedAt: input.playedAt ? new Date(input.playedAt) : undefined,
+          metadata: input.metadata as Prisma.InputJsonValue | undefined,
+        })),
+      });
 
-      for (const input of results) {
-        const rows = await tx.$queryRaw<InsertedReplayKey[]>`
-          INSERT INTO "game_replay_keys" ("gameId", "replayHash", "guestId", "score")
-          VALUES (${gameId}, ${input.replayHash}, ${guestId}, ${input.score})
-          ON CONFLICT ("gameId", "replayHash") DO NOTHING
-          RETURNING "replayHash", "guestId", "score"
-        `;
+      const insertedResults = results.map((result) => ({
+        replayHash: result.replayHash,
+        guestId,
+        score: result.score,
+      }));
 
-        if (rows.length > 0) {
-          insertedKeys.push(rows[0]);
-        }
-      }
-
-      if (insertedKeys.length > 0) {
-        await tx.gameResult.createMany({
-          data: insertedKeys.map((key) => {
-            const input = results.find((result) => result.replayHash === key.replayHash)!;
-            return {
-              gameId,
-              guestId,
-              score: key.score,
-              replayHash: key.replayHash,
-              playedAt: input.playedAt ? new Date(input.playedAt) : undefined,
-              metadata: input.metadata as Prisma.InputJsonValue | undefined,
-            };
-          }),
-        });
-      }
-
-      const bestScore = Math.max(...insertedKeys.map((key) => key.score), 0);
+      const bestScore = Math.max(...insertedResults.map((result) => result.score), 0);
       if (bestScore > 0) {
         await tx.$executeRaw`
           INSERT INTO "leaderboard" ("gameId", "guestId", "bestScore", "updatedAt")
@@ -86,7 +78,7 @@ export class GameRepository {
         `;
       }
 
-      return insertedKeys;
+      return insertedResults;
     });
   }
 
