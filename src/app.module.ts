@@ -10,8 +10,8 @@ import { GameModule } from '@/modules/game/game.module';
 import { GuestModule } from '@/modules/guest/guest.module';
 import { RedisModule } from '@/modules/redis/redis.module';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
+import { RedisThrottlerStorageService } from '@/modules/redis/services';
 import { LeaderboardModule } from '@/modules/leaderboard/leaderboard.module';
-import { RedisThrottlerStorageService } from '@/modules/redis/redis-throttler-storage.service';
 
 @Module({
   controllers: [AppController],

@@ -31,7 +31,7 @@ export class RedisRankingService implements OnModuleDestroy {
     await this.redis.quit();
   }
 
-  async updateScore(key: string, guestId: string, bestScore: number): Promise<void> {
+  async updateScore(key: string, guestId: string, bestScore: number) {
     const encodedScore = encodeLeaderboardScore(bestScore, guestId);
 
     for (let attempt = 1; attempt <= REDIS_UPDATE_MAX_RETRIES; attempt++) {
@@ -52,11 +52,7 @@ export class RedisRankingService implements OnModuleDestroy {
     }
   }
 
-  async getTop(
-    key: string,
-    limit = LEADERBOARD_TOP_LIMIT,
-    offset = 0,
-  ): Promise<LeaderboardEntry[]> {
+  async getTop(key: string, limit = LEADERBOARD_TOP_LIMIT, offset = 0) {
     const cappedLimit = Math.min(limit, LEADERBOARD_TOP_LIMIT);
     const results = await this.redis.zrevrange(key, offset, offset + cappedLimit - 1, 'WITHSCORES');
 
@@ -72,14 +68,11 @@ export class RedisRankingService implements OnModuleDestroy {
     return entries;
   }
 
-  async getCount(key: string): Promise<number> {
+  async getCount(key: string) {
     return this.redis.zcard(key);
   }
 
-  async getPlayerRank(
-    key: string,
-    guestId: string,
-  ): Promise<{ rank: number; score: number } | null> {
+  async getPlayerRank(key: string, guestId: string) {
     const encodedScore = await this.redis.zscore(key, guestId);
     if (encodedScore === null) {
       return null;
@@ -96,10 +89,7 @@ export class RedisRankingService implements OnModuleDestroy {
     };
   }
 
-  async rebuildGlobal(
-    gameId: string,
-    entries: Array<{ guestId: string; bestScore: number }>,
-  ): Promise<void> {
+  async rebuildGlobal(gameId: string, entries: Array<{ guestId: string; bestScore: number }>) {
     const key = REDIS_KEYS.global(gameId);
     await this.redis.del(key);
 
@@ -115,14 +105,12 @@ export class RedisRankingService implements OnModuleDestroy {
     await this.redis.zadd(key, ...args);
   }
 
-  getGlobalKey(gameId: string): string {
+  getGlobalKey(gameId: string) {
     return REDIS_KEYS.global(gameId);
   }
 }
 
-export function createRedisClient(configService: {
-  get: (key: string) => string | undefined;
-}): Redis {
+export function createRedisClient(configService: { get: (key: string) => string | undefined }) {
   const url = configService.get('REDIS_URL');
   if (!url) {
     throw new Error('REDIS_URL is not configured');

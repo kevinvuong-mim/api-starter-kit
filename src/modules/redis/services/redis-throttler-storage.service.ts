@@ -4,13 +4,6 @@ import { ThrottlerStorage } from '@nestjs/throttler';
 
 import { REDIS_CLIENT } from '@/modules/redis/redis.constants';
 
-interface ThrottlerStorageRecord {
-  totalHits: number;
-  isBlocked: boolean;
-  timeToExpire: number;
-  timeToBlockExpire: number;
-}
-
 const INCREMENT_SCRIPT = `
 local hitsKey = KEYS[1]
 local blockKey = KEYS[2]
@@ -55,7 +48,7 @@ export class RedisThrottlerStorageService implements ThrottlerStorage {
     limit: number,
     blockDuration: number,
     throttlerName: string,
-  ): Promise<ThrottlerStorageRecord> {
+  ) {
     const blockDurationMs = blockDuration > 0 ? blockDuration : ttl;
     const [totalHits, timeToExpireMs, isBlocked, timeToBlockExpireMs] = (await this.redis.eval(
       INCREMENT_SCRIPT,
@@ -75,11 +68,11 @@ export class RedisThrottlerStorageService implements ThrottlerStorage {
     };
   }
 
-  private hitsKey(throttlerName: string, key: string): string {
+  private hitsKey(throttlerName: string, key: string) {
     return `throttle:${throttlerName}:${key}:hits`;
   }
 
-  private blockKey(throttlerName: string, key: string): string {
+  private blockKey(throttlerName: string, key: string) {
     return `throttle:${throttlerName}:${key}:block`;
   }
 }

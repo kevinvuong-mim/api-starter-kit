@@ -1,5 +1,5 @@
-import { ParsedGameConfig } from '@/modules/game/game-config.validator';
-import { RUN_SEED_METADATA_KEY, verifyReplayHash } from '@/modules/game/game-replay-hmac.util';
+import { ParsedGameConfig } from '@/common/validators';
+import { verifyReplayHash, RUN_SEED_METADATA_KEY } from '@/common/utils';
 
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/i;
 

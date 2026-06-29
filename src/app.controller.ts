@@ -9,7 +9,7 @@ export class AppController {
 
   @SkipThrottle()
   @Get()
-  getHello(): string {
+  getHello() {
     return this.appService.getHello();
   }
 

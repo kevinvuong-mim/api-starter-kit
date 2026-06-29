@@ -3,14 +3,12 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { InitGuestDto } from '@/modules/guest/dto/init-guest.dto';
 import { GuestRepository } from '@/modules/guest/guest.repository';
-import { InitGuestResponseDto } from '@/modules/guest/dto/init-guest-response.dto';
-import { GuestProfileResponseDto } from '@/modules/guest/dto/guest-profile-response.dto';
 
 @Injectable()
 export class GuestService {
   constructor(private readonly guestRepository: GuestRepository) {}
 
-  async initializeGuest(dto: InitGuestDto): Promise<InitGuestResponseDto> {
+  async initializeGuest(dto: InitGuestDto) {
     const { installId } = dto;
 
     if (installId) {
@@ -48,13 +46,6 @@ export class GuestService {
     }
   }
 
-  getProfile(guest: GuestPlayer): GuestProfileResponseDto {
-    return {
-      guestId: guest.id,
-      name: guest.name,
-    };
-  }
-
   async getGuestById(guestId: string): Promise<GuestPlayer | undefined> {
     return (await this.guestRepository.findById(guestId)) ?? undefined;
   }
@@ -68,7 +59,7 @@ export class GuestService {
     return guest;
   }
 
-  async updateName(guest: GuestPlayer, name: string): Promise<GuestProfileResponseDto> {
+  async updateName(guest: GuestPlayer, name: string) {
     const updated = await this.guestRepository.updateName(guest.id, name);
     return {
       guestId: updated.id,

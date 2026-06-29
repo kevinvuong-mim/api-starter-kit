@@ -1,9 +1,9 @@
 import { Logger, Injectable, OnModuleInit } from '@nestjs/common';
 
+import { GameRegistryService } from '@/modules/game/services';
+import { RedisRankingService } from '@/modules/redis/services';
 import { GameRepository } from '@/modules/game/game.repository';
 import { LeaderboardEntry } from '@/modules/redis/redis.constants';
-import { GameRegistryService } from '@/modules/game/game-registry.service';
-import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 
 export interface LeaderboardRankings {
   total: number;
@@ -22,7 +22,7 @@ export class LeaderboardCacheService implements OnModuleInit {
     private readonly redisRankingService: RedisRankingService,
   ) {}
 
-  onModuleInit(): void {
+  onModuleInit() {
     void this.warmAll().catch((error) => {
       this.logger.warn(
         'Initial Redis leaderboard warm failed',
@@ -31,7 +31,7 @@ export class LeaderboardCacheService implements OnModuleInit {
     });
   }
 
-  async warmAll(): Promise<void> {
+  async warmAll() {
     this.logger.log('Warming Redis leaderboards from PostgreSQL');
 
     const games = await this.gameRegistryService.getGames();
@@ -43,7 +43,7 @@ export class LeaderboardCacheService implements OnModuleInit {
     }
   }
 
-  async getRankings(gameId: string, limit: number, offset: number): Promise<LeaderboardRankings> {
+  async getRankings(gameId: string, limit: number, offset: number) {
     const key = this.redisRankingService.getGlobalKey(gameId);
     const [redisCount, pgTotal] = await Promise.all([
       this.redisRankingService.getCount(key),
@@ -75,7 +75,7 @@ export class LeaderboardCacheService implements OnModuleInit {
     return { entries, total: pgTotal, source: 'postgres' };
   }
 
-  async getPlayerRank(gameId: string, guestId: string): Promise<number | null> {
+  async getPlayerRank(gameId: string, guestId: string) {
     const key = this.redisRankingService.getGlobalKey(gameId);
     const rankInfo = await this.redisRankingService.getPlayerRank(key, guestId);
 
@@ -86,7 +86,7 @@ export class LeaderboardCacheService implements OnModuleInit {
     return this.gameRepository.getPlayerRank(gameId, guestId);
   }
 
-  private scheduleRebuild(gameId: string): void {
+  private scheduleRebuild(gameId: string) {
     if (this.rebuildsInFlight.has(gameId)) {
       return;
     }
@@ -97,7 +97,7 @@ export class LeaderboardCacheService implements OnModuleInit {
     });
   }
 
-  private async rebuildGame(gameId: string): Promise<void> {
+  private async rebuildGame(gameId: string) {
     try {
       const allEntries = await this.gameRepository.getAllLeaderboardEntries(gameId);
       await this.redisRankingService.rebuildGlobal(gameId, allEntries);

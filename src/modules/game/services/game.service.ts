@@ -1,14 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Logger, Injectable } from '@nestjs/common';
 
+import { validateGameResult } from '@/common/validators';
+import { GameRegistryService } from '@/modules/game/services';
+import { RedisRankingService } from '@/modules/redis/services';
 import { GameRepository } from '@/modules/game/game.repository';
 import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';
-import { GameRegistryService } from '@/modules/game/game-registry.service';
-import { validateGameResult } from '@/modules/game/game-result.validation';
-import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
-import {
-  SyncGameResultItemResponseDto,
-  SyncGameResultsResponseDto,
-} from '@/modules/game/dto/sync-game-results-response.dto';
 
 @Injectable()
 export class GameService {
@@ -20,11 +16,7 @@ export class GameService {
     private readonly redisRankingService: RedisRankingService,
   ) {}
 
-  async syncResults(
-    gameId: string,
-    guestId: string,
-    results: GameResultDto[],
-  ): Promise<SyncGameResultsResponseDto> {
+  async syncResults(gameId: string, guestId: string, results: GameResultDto[]) {
     const game = await this.gameRegistryService.assertGameExists(gameId);
     const config = this.gameRegistryService.getConfig(game);
 
@@ -32,7 +24,7 @@ export class GameService {
     const existingRows = await this.gameRepository.findReplayResults(gameId, replayHashes);
     const existingByHash = new Map(existingRows.map((row) => [row.replayHash, row]));
 
-    const responseByHash = new Map<string, SyncGameResultItemResponseDto>();
+    const responseByHash = new Map();
     const toInsert: GameResultDto[] = [];
     const seenInBatch = new Map<string, { guestId: string; score: number }>();
 
@@ -93,8 +85,6 @@ export class GameService {
       });
     }
 
-    this.logAcceptedResultAnomalies(gameId, guestId, results, itemResponses, config);
-
     // Push the guest's authoritative best score (post-GREATEST in PG) to Redis exactly once.
     // The Lua script only raises an existing score, so this stays consistent even on retries.
     if (hasInserted && bestScore > 0) {
@@ -102,56 +92,6 @@ export class GameService {
       await this.redisRankingService.updateScore(redisKey, guestId, bestScore);
     }
 
-    return { results: itemResponses, accepted, rejected, bestScore };
-  }
-
-  private logAcceptedResultAnomalies(
-    gameId: string,
-    guestId: string,
-    results: GameResultDto[],
-    itemResponses: SyncGameResultItemResponseDto[],
-    config: ReturnType<GameRegistryService['getConfig']>,
-  ): void {
-    if (!config.minDurationMs && !config.maxScorePerMinute) {
-      return;
-    }
-
-    for (let index = 0; index < results.length; index += 1) {
-      if (itemResponses[index]?.status !== 'accepted') {
-        continue;
-      }
-
-      const result = results[index];
-      const durationSeconds =
-        typeof result.metadata?.duration === 'number' && Number.isFinite(result.metadata.duration)
-          ? result.metadata.duration
-          : undefined;
-      const reasons: string[] = [];
-
-      if (
-        config.minDurationMs &&
-        durationSeconds &&
-        durationSeconds * 1000 < config.minDurationMs
-      ) {
-        reasons.push('MIN_DURATION');
-      }
-
-      if (config.maxScorePerMinute && durationSeconds && durationSeconds > 0) {
-        const scorePerMinute = (result.score / durationSeconds) * 60;
-        if (scorePerMinute > config.maxScorePerMinute) {
-          reasons.push('SCORE_RATE');
-        }
-      }
-
-      if (reasons.length > 0) {
-        this.logger.warn('Accepted result matched anomaly policy', {
-          gameId,
-          guestId,
-          score: result.score,
-          replayHash: result.replayHash,
-          reasons,
-        });
-      }
-    }
+    return { accepted, rejected, bestScore, results: itemResponses };
   }
 }

@@ -10,7 +10,7 @@ export class RedisRateLimitService {
   /**
    * Sliding window counter. Returns true if the request is allowed.
    */
-  async consume(key: string, limit: number, windowSeconds: number): Promise<boolean> {
+  async consume(key: string, limit: number, windowSeconds: number) {
     const count = await this.redis.incr(key);
 
     if (count === 1) {

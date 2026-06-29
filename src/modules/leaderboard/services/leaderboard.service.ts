@@ -1,10 +1,9 @@
 import { Injectable } from '@nestjs/common';
 
+import { GameRegistryService } from '@/modules/game/services';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { GameRegistryService } from '@/modules/game/game-registry.service';
+import { LeaderboardCacheService } from '@/modules/leaderboard/services';
 import { LeaderboardQueryDto } from '@/modules/leaderboard/dto/leaderboard-query.dto';
-import { LeaderboardCacheService } from '@/modules/leaderboard/leaderboard-cache.service';
-import { LeaderboardResponseDto } from '@/modules/leaderboard/dto/leaderboard-response.dto';
 
 @Injectable()
 export class LeaderboardService {
@@ -14,10 +13,7 @@ export class LeaderboardService {
     private readonly leaderboardCacheService: LeaderboardCacheService,
   ) {}
 
-  async getLeaderboard(
-    query: LeaderboardQueryDto,
-    guestId?: string,
-  ): Promise<LeaderboardResponseDto> {
+  async getLeaderboard(query: LeaderboardQueryDto, guestId?: string) {
     await this.gameRegistryService.assertGameExists(query.gameId);
 
     const page = query.page;
@@ -56,7 +52,7 @@ export class LeaderboardService {
     };
   }
 
-  private async resolveGuestNames(guestIds: string[]): Promise<Map<string, string | null>> {
+  private async resolveGuestNames(guestIds: string[]) {
     if (guestIds.length === 0) {
       return new Map();
     }

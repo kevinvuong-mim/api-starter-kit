@@ -1,1 +1,1 @@
-export { CurrentGuest } from '@/common/decorators/current-guest.decorator';
+export * from '@/common/decorators/current-guest.decorator';

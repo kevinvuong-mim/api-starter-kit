@@ -4,13 +4,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import { REDIS_CLIENT } from '@/modules/redis/redis.constants';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
-export interface HealthCheckResult {
-  timestamp: string;
-  redis: 'up' | 'down';
-  postgres: 'up' | 'down';
-  status: 'ok' | 'degraded';
-}
-
 @Injectable()
 export class AppService {
   constructor(
@@ -18,11 +11,11 @@ export class AppService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
-  getHello(): string {
+  getHello() {
     return 'Hello World!';
   }
 
-  async check(): Promise<HealthCheckResult> {
+  async check() {
     const [postgres, redis] = await Promise.all([this.checkPostgres(), this.checkRedis()]);
 
     return {

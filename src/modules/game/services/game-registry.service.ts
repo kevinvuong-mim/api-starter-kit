@@ -2,7 +2,7 @@ import { Game } from '@prisma/client';
 import { Logger, Injectable, OnModuleInit, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { ParsedGameConfig, parseGameConfig } from '@/modules/game/game-config.validator';
+import { ParsedGameConfig, parseGameConfig } from '@/common/validators';
 
 @Injectable()
 export class GameRegistryService implements OnModuleInit {

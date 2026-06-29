@@ -1,7 +1,7 @@
 import { Cron } from '@nestjs/schedule';
 import { Logger, Injectable } from '@nestjs/common';
 
-import { LeaderboardCacheService } from '@/modules/leaderboard/leaderboard-cache.service';
+import { LeaderboardCacheService } from '@/modules/leaderboard/services';
 
 @Injectable()
 export class LeaderboardMaintenanceService {
@@ -10,7 +10,7 @@ export class LeaderboardMaintenanceService {
   constructor(private readonly leaderboardCacheService: LeaderboardCacheService) {}
 
   @Cron('0 3 * * *')
-  async rebuildRedisLeaderboards(): Promise<void> {
+  async rebuildRedisLeaderboards() {
     this.logger.log('Scheduled Redis leaderboard rebuild');
     await this.leaderboardCacheService.warmAll();
     this.logger.log('Scheduled Redis leaderboard rebuild complete');

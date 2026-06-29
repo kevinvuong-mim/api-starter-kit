@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import {
+  createRedisClient,
+  RedisRankingService,
+  RedisRateLimitService,
+  RedisThrottlerStorageService,
+} from './services';
 import { REDIS_CLIENT } from '@/modules/redis/redis.constants';
-import { RedisRateLimitService } from '@/modules/redis/redis-rate-limit.service';
-import { createRedisClient, RedisRankingService } from '@/modules/redis/redis-ranking.service';
-import { RedisThrottlerStorageService } from '@/modules/redis/redis-throttler-storage.service';
 
 @Module({
   providers: [

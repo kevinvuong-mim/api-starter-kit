@@ -8,7 +8,7 @@ import {
 import { Request } from 'express';
 import { GuestPlayer } from '@prisma/client';
 
-import { RedisRateLimitService } from '@/modules/redis/redis-rate-limit.service';
+import { RedisRateLimitService } from '@/modules/redis/services';
 
 type GuestRequest = Request & { guest?: GuestPlayer };
 
