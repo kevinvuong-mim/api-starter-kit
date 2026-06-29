@@ -3,8 +3,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GameRepository } from '@/modules/game/game.repository';
 import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
-import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import { validateGameResult } from '@/modules/game/game-result.validation';
+import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
 import {
   SyncGameResultItemResponseDto,
   SyncGameResultsResponseDto,

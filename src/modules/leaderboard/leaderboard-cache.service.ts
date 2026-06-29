@@ -1,20 +1,20 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Logger, Injectable, OnModuleInit } from '@nestjs/common';
 
 import { GameRepository } from '@/modules/game/game.repository';
+import { LeaderboardEntry } from '@/modules/redis/redis.constants';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { RedisRankingService } from '@/modules/redis/redis-ranking.service';
-import { LeaderboardEntry } from '@/modules/redis/redis.constants';
 
 export interface LeaderboardRankings {
-  entries: LeaderboardEntry[];
   total: number;
+  entries: LeaderboardEntry[];
   source: 'redis' | 'postgres';
 }
 
 @Injectable()
 export class LeaderboardCacheService implements OnModuleInit {
-  private readonly logger = new Logger(LeaderboardCacheService.name);
   private readonly rebuildsInFlight = new Set<string>();
+  private readonly logger = new Logger(LeaderboardCacheService.name);
 
   constructor(
     private readonly gameRepository: GameRepository,

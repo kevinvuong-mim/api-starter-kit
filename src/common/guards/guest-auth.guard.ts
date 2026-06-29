@@ -4,7 +4,7 @@ import { Injectable, CanActivate, BadRequestException, ExecutionContext } from '
 
 import { GuestService } from '@/modules/guest/guest.service';
 
-type GuestRequest = Request & { body?: { guestId?: unknown }; guest?: GuestPlayer };
+type GuestRequest = Request & { guest?: GuestPlayer; body?: { guestId?: unknown } };
 
 @Injectable()
 export class GuestAuthGuard implements CanActivate {
@@ -33,9 +33,6 @@ export class GuestAuthGuard implements CanActivate {
       return queryGuestId;
     }
 
-    const headerGuestId = request.headers['x-guest-id'];
-    return typeof headerGuestId === 'string' && headerGuestId.length > 0
-      ? headerGuestId
-      : undefined;
+    return undefined;
   }
 }

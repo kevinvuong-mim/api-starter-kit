@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 import { randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 

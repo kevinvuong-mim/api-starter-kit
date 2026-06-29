@@ -85,7 +85,7 @@ curl http://localhost:3000/api/health
 ## Business Logic
 
 - `GET /api` → `AppService.getHello()`.
-- `GET /api/health` → `HealthService.check()`:
+- `GET /api/health` → `AppService.check()`:
   - Postgres: `SELECT 1` qua Prisma.
   - Redis: `PING`.
 
@@ -102,5 +102,3 @@ curl http://localhost:3000/api/health
 
 - Global prefix `/api` (cấu hình `main.ts`).
 - Response envelope qua `ResponseInterceptor`.
-- Request ID: header `x-request-id` (tự generate nếu client không gửi).
-- Structured logging qua `LoggingInterceptor`.

@@ -5,7 +5,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AppService } from '@/app.service';
-import { HealthService } from '@/health.service';
 import { AppController } from '@/app.controller';
 import { GameModule } from '@/modules/game/game.module';
 import { GuestModule } from '@/modules/guest/guest.module';
@@ -18,7 +17,6 @@ import { RedisThrottlerStorageService } from '@/modules/redis/redis-throttler-st
   controllers: [AppController],
   providers: [
     AppService,
-    HealthService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
@@ -31,6 +29,7 @@ import { RedisThrottlerStorageService } from '@/modules/redis/redis-throttler-st
     PrismaModule,
     LeaderboardModule,
     ScheduleModule.forRoot(),
+    ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
       inject: [RedisThrottlerStorageService],
@@ -44,7 +43,6 @@ import { RedisThrottlerStorageService } from '@/modules/redis/redis-throttler-st
         ],
       }),
     }),
-    ConfigModule.forRoot({ isGlobal: true }),
   ],
 })
 export class AppModule {}

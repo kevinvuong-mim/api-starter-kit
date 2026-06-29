@@ -100,7 +100,7 @@ src/
 ├── common/
 │   ├── decorators/         # @CurrentGuest()
 │   ├── filters/            # HTTP exception filter
-│   ├── guards/             # GuestAuthGuard, OptionalGuestAuthGuard
+│   ├── guards/             # GuestAuthGuard
 │   ├── interceptors/       # Standard response envelope
 │   ├── interfaces/
 │   ├── utils/              # Shared utility helpers

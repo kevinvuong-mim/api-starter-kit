@@ -9,8 +9,8 @@ export class SyncGameResultItemResponseDto {
 }
 
 export class SyncGameResultsResponseDto {
-  results!: SyncGameResultItemResponseDto[];
   accepted!: number;
   rejected!: number;
   bestScore!: number;
+  results!: SyncGameResultItemResponseDto[];
 }

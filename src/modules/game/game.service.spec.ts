@@ -1,6 +1,6 @@
 import { GameService } from '@/modules/game/game.service';
-import { computeReplayHash } from '@/modules/game/game-replay-hmac.util';
 import { ParsedGameConfig } from '@/modules/game/game-config.validator';
+import { computeReplayHash } from '@/modules/game/game-replay-hmac.util';
 
 describe('GameService', () => {
   const gameId = 'puzzle-quest';

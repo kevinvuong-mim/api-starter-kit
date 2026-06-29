@@ -49,16 +49,6 @@ NODE_ENV="development"
 - `development`: logging chi tiết hơn (stack trace trong error response).
 - `production`: tối ưu runtime.
 
-### CORS_ORIGINS
-
-Danh sách origin được phép gọi API từ trình duyệt, phân tách bằng dấu phẩy. Production nên dùng HTTPS origin cụ thể.
-
-```env
-CORS_ORIGINS="https://my-game.example.com,https://admin.example.com"
-```
-
-Trong development, nếu không cấu hình thì API cho phép mọi origin để thuận tiện chạy local.
-
 ---
 
 ## Tổng hợp — File .env hoàn chỉnh
@@ -73,7 +63,6 @@ REDIS_URL="redis://localhost:6379"
 # Server
 PORT=3000
 NODE_ENV="development"
-CORS_ORIGINS="http://localhost:5173"
 ```
 
 **Lưu ý quan trọng:**

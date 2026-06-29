@@ -3,8 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameRegistryService } from '@/modules/game/game-registry.service';
 import { LeaderboardQueryDto } from '@/modules/leaderboard/dto/leaderboard-query.dto';
-import { LeaderboardResponseDto } from '@/modules/leaderboard/dto/leaderboard-response.dto';
 import { LeaderboardCacheService } from '@/modules/leaderboard/leaderboard-cache.service';
+import { LeaderboardResponseDto } from '@/modules/leaderboard/dto/leaderboard-response.dto';
 
 @Injectable()
 export class LeaderboardService {

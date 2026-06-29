@@ -1,10 +1,10 @@
 import { Prisma } from '@prisma/client';
 
 export interface ParsedGameConfig {
-  anomalyMode: 'log' | 'reject';
+  replaySecret?: string;
   minDurationMs?: number;
   maxScorePerMinute?: number;
-  replaySecret?: string;
+  anomalyMode: 'log' | 'reject';
 }
 
 export function parseGameConfig(config: Prisma.JsonValue): ParsedGameConfig {

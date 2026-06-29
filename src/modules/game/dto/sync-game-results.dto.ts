@@ -1,11 +1,11 @@
 import {
   Min,
   IsInt,
+  Matches,
   IsArray,
   IsString,
   IsISO8601,
   IsOptional,
-  Matches,
   ArrayMaxSize,
   ArrayMinSize,
   ValidateNested,

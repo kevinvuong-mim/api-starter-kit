@@ -1,7 +1,4 @@
-import {
-  encodeLeaderboardScore,
-  decodeLeaderboardScore,
-} from '@/common/utils/leaderboard-score.util';
+import { decodeLeaderboardScore, encodeLeaderboardScore } from '@/common/utils';
 
 describe('leaderboard-score.util', () => {
   it('encodes and decodes bestScore', () => {

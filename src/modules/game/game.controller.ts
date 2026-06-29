@@ -1,5 +1,5 @@
-import { Post, Body, Param, Controller, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { Post, Body, Param, Controller, UseGuards } from '@nestjs/common';
 
 import { GameService } from '@/modules/game/game.service';
 import { GuestAuthGuard } from '@/common/guards/guest-auth.guard';

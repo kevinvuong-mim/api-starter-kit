@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { GameResultDto } from '@/modules/game/dto/sync-game-results.dto';

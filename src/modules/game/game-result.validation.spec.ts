@@ -1,18 +1,18 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 
 import {
-  validateGameResult,
   validatePlayedAt,
+  validateGameResult,
   ResultRejectionReason,
 } from '@/modules/game/game-result.validation';
-import { computeReplayHash } from '@/modules/game/game-replay-hmac.util';
 import { parseGameConfig } from '@/modules/game/game-config.validator';
+import { computeReplayHash } from '@/modules/game/game-replay-hmac.util';
 
 interface ReplayHashVector {
   name: string;
-  gameId: string;
   score: number;
+  gameId: string;
   runSeed: string;
   replayHash: string;
   replaySecret: string;

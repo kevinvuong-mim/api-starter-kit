@@ -1,12 +1,12 @@
-import { Body, Get, Post, Query, Patch, Controller, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { GuestPlayer } from '@prisma/client';
+import { Get, Body, Post, Query, Patch, Controller, UseGuards } from '@nestjs/common';
 
 import { GuestService } from '@/modules/guest/guest.service';
 import { GuestAuthGuard } from '@/common/guards/guest-auth.guard';
-import { CurrentGuest } from '@/common/decorators/current-guest.decorator';
 import { InitGuestDto } from '@/modules/guest/dto/init-guest.dto';
 import { GuestIdQueryDto } from '@/modules/guest/dto/guest-id-query.dto';
+import { CurrentGuest } from '@/common/decorators/current-guest.decorator';
 import { UpdateGuestNameDto } from '@/modules/guest/dto/update-guest-name.dto';
 import { InitGuestResponseDto } from '@/modules/guest/dto/init-guest-response.dto';
 import { GuestProfileResponseDto } from '@/modules/guest/dto/guest-profile-response.dto';

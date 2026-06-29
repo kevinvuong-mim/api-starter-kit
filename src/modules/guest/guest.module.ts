@@ -4,11 +4,10 @@ import { GuestService } from '@/modules/guest/guest.service';
 import { GuestAuthGuard } from '@/common/guards/guest-auth.guard';
 import { GuestController } from '@/modules/guest/guest.controller';
 import { GuestRepository } from '@/modules/guest/guest.repository';
-import { OptionalGuestAuthGuard } from '@/common/guards/optional-guest-auth.guard';
 
 @Module({
   controllers: [GuestController],
-  exports: [GuestService, GuestRepository, GuestAuthGuard, OptionalGuestAuthGuard],
-  providers: [GuestService, GuestRepository, GuestAuthGuard, OptionalGuestAuthGuard],
+  exports: [GuestService, GuestRepository, GuestAuthGuard],
+  providers: [GuestService, GuestRepository, GuestAuthGuard],
 })
 export class GuestModule {}

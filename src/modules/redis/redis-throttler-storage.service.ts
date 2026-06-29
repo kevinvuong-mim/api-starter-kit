@@ -6,8 +6,8 @@ import { REDIS_CLIENT } from '@/modules/redis/redis.constants';
 
 interface ThrottlerStorageRecord {
   totalHits: number;
-  timeToExpire: number;
   isBlocked: boolean;
+  timeToExpire: number;
   timeToBlockExpire: number;
 }
 

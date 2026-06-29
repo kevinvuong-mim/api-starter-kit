@@ -18,7 +18,7 @@ import { GameResultsPartitionService } from '@/modules/game/game-results-partiti
     GuestRateLimitGuard,
     GameResultsPartitionService,
   ],
-  exports: [GameRegistryService, GameRepository],
   imports: [GuestModule, RedisModule],
+  exports: [GameRegistryService, GameRepository],
 })
 export class GameModule {}

@@ -1,10 +1,7 @@
 import Redis from 'ioredis';
 import { Inject, Logger, Injectable, OnModuleDestroy } from '@nestjs/common';
 
-import {
-  decodeLeaderboardScore,
-  encodeLeaderboardScore,
-} from '@/common/utils/leaderboard-score.util';
+import { decodeLeaderboardScore, encodeLeaderboardScore } from '@/common/utils';
 import { REDIS_KEYS, REDIS_CLIENT, LeaderboardEntry } from '@/modules/redis/redis.constants';
 
 const LEADERBOARD_TOP_LIMIT = 100;
