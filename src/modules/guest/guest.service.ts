@@ -46,7 +46,7 @@ export class GuestService {
     }
   }
 
-  async getGuestById(guestId: string): Promise<GuestPlayer | undefined> {
+  async getGuestById(guestId: string) {
     return (await this.guestRepository.findById(guestId)) ?? undefined;
   }
 

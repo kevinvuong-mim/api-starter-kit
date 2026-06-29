@@ -14,17 +14,17 @@ export class GameResultsPartitionService implements OnModuleInit {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async onModuleInit(): Promise<void> {
+  async onModuleInit() {
     await this.ensureUpcomingPartitions();
   }
 
   /** Ensures yearly partitions exist. Partitions are retained indefinitely. */
   @Cron('0 4 1 1 *')
-  async maintainPartitions(): Promise<void> {
+  async maintainPartitions() {
     await this.ensureUpcomingPartitions();
   }
 
-  async ensureUpcomingPartitions(yearsAhead = 1): Promise<void> {
+  async ensureUpcomingPartitions(yearsAhead = 1) {
     const now = new Date();
 
     for (let offset = 0; offset <= yearsAhead; offset += 1) {
@@ -51,12 +51,12 @@ export class GameResultsPartitionService implements OnModuleInit {
     }
   }
 
-  private partitionName(date: Date): string {
+  private partitionName(date: Date) {
     const year = date.getUTCFullYear();
     return `game_results_${year}`;
   }
 
-  private yearStart(date: Date): Date {
+  private yearStart(date: Date) {
     return new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
   }
 }

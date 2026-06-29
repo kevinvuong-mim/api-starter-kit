@@ -1,8 +1,8 @@
 import { Game } from '@prisma/client';
 import { Logger, Injectable, OnModuleInit, NotFoundException } from '@nestjs/common';
 
+import { parseGameConfig } from '@/common/validators';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { ParsedGameConfig, parseGameConfig } from '@/common/validators';
 
 @Injectable()
 export class GameRegistryService implements OnModuleInit {
@@ -12,7 +12,7 @@ export class GameRegistryService implements OnModuleInit {
 
   // Fail fast on boot: a production game without a replaySecret silently disables HMAC
   // anti-cheat (any well-formed hash would pass), so refuse to start in that state.
-  async onModuleInit(): Promise<void> {
+  async onModuleInit() {
     const games = await this.getGames();
     const missing = games.filter((game) => !parseGameConfig(game.config).replaySecret);
 
@@ -30,13 +30,13 @@ export class GameRegistryService implements OnModuleInit {
     this.logger.warn(message);
   }
 
-  getGames(): Promise<Game[]> {
+  getGames() {
     return this.prisma.game.findMany({
       orderBy: { id: 'asc' },
     });
   }
 
-  async assertGameExists(gameId: string): Promise<Game> {
+  async assertGameExists(gameId: string) {
     const game = await this.prisma.game.findUnique({ where: { id: gameId } });
 
     if (!game) {
@@ -46,7 +46,7 @@ export class GameRegistryService implements OnModuleInit {
     return game;
   }
 
-  getConfig(game: Game): ParsedGameConfig {
+  getConfig(game: Game) {
     return parseGameConfig(game.config);
   }
 }

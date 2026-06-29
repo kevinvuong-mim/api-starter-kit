@@ -20,7 +20,7 @@ export interface LeaderboardPageEntry {
 export class GameRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findReplayResults(gameId: string, replayHashes: string[]): Promise<ReplayResultOwner[]> {
+  findReplayResults(gameId: string, replayHashes: string[]) {
     if (replayHashes.length === 0) {
       return Promise.resolve([]);
     }
@@ -39,11 +39,7 @@ export class GameRepository {
     });
   }
 
-  async insertResultsBatch(
-    gameId: string,
-    guestId: string,
-    results: GameResultDto[],
-  ): Promise<ReplayResultOwner[]> {
+  async insertResultsBatch(gameId: string, guestId: string, results: GameResultDto[]) {
     if (results.length === 0) {
       return [];
     }
@@ -82,11 +78,11 @@ export class GameRepository {
     });
   }
 
-  getLeaderboardCount(gameId: string): Promise<number> {
+  getLeaderboardCount(gameId: string) {
     return this.prisma.leaderboard.count({ where: { gameId } });
   }
 
-  getBestScoreForGuest(gameId: string, guestId: string): Promise<number> {
+  async getBestScoreForGuest(gameId: string, guestId: string) {
     return this.prisma.leaderboard
       .findUnique({
         where: { gameId_guestId: { gameId, guestId } },
@@ -95,7 +91,7 @@ export class GameRepository {
       .then((entry) => entry?.bestScore ?? 0);
   }
 
-  async getPlayerRank(gameId: string, guestId: string): Promise<number | null> {
+  async getPlayerRank(gameId: string, guestId: string) {
     const entry = await this.prisma.leaderboard.findUnique({
       where: { gameId_guestId: { gameId, guestId } },
       select: { bestScore: true, guestId: true },
@@ -118,7 +114,7 @@ export class GameRepository {
     return Number(rows[0].rank);
   }
 
-  getAllLeaderboardEntries(gameId: string): Promise<Array<{ guestId: string; bestScore: number }>> {
+  async getAllLeaderboardEntries(gameId: string) {
     return this.prisma.leaderboard
       .findMany({
         where: { gameId },
@@ -133,11 +129,7 @@ export class GameRepository {
       );
   }
 
-  getLeaderboardEntriesPage(
-    gameId: string,
-    limit: number,
-    offset: number,
-  ): Promise<LeaderboardPageEntry[]> {
+  async getLeaderboardEntriesPage(gameId: string, limit: number, offset: number) {
     return this.prisma.leaderboard
       .findMany({
         skip: offset,

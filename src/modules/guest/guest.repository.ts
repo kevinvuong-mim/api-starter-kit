@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { GuestPlayer } from '@prisma/client';
 
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
@@ -11,15 +10,15 @@ export interface GuestCredentials {
 export class GuestRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findById(id: string): Promise<GuestPlayer | null> {
+  findById(id: string) {
     return this.prisma.guestPlayer.findUnique({ where: { id } });
   }
 
-  findByInstallId(installId: string): Promise<GuestPlayer | null> {
+  findByInstallId(installId: string) {
     return this.prisma.guestPlayer.findUnique({ where: { installId } });
   }
 
-  async create(installId?: string): Promise<GuestCredentials> {
+  async create(installId?: string) {
     const guest = await this.prisma.guestPlayer.create({
       data: {
         installId,
@@ -31,7 +30,7 @@ export class GuestRepository {
     };
   }
 
-  updateName(id: string, name: string): Promise<GuestPlayer> {
+  updateName(id: string, name: string) {
     return this.prisma.guestPlayer.update({ where: { id }, data: { name } });
   }
 }
