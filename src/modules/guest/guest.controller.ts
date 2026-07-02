@@ -1,26 +1,36 @@
-import { Throttle } from '@nestjs/throttler';
-import type { GuestPlayer } from '@prisma/client';
-import { Body, Post, Patch, Controller, UseGuards } from '@nestjs/common';
+import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
 
-import { GuestService } from '@/modules/guest/guest.service';
-import { GuestAuthGuard } from '@/common/guards/guest-auth.guard';
+import { Guest, RateLimit, type AuthenticatedGuest } from '@/common/decorators';
+import { GuestAuthGuard, RateLimitGuard } from '@/common/guards';
 import { InitGuestDto } from '@/modules/guest/dto/init-guest.dto';
-import { CurrentGuest } from '@/common/decorators/current-guest.decorator';
-import { UpdateGuestNameDto } from '@/modules/guest/dto/update-guest-name.dto';
+import { UpdateNameDto } from '@/modules/guest/dto/update-name.dto';
+import { GuestService } from '@/modules/guest/guest.service';
 
 @Controller('guest')
+@UseGuards(RateLimitGuard)
 export class GuestController {
   constructor(private readonly guestService: GuestService) {}
 
   @Post('init')
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @RateLimit({
+    keyPrefix: 'rate:init:',
+    keySource: 'ip',
+    limit: Number(process.env.RATE_LIMIT_INIT ?? 5),
+    windowSeconds: 60,
+  })
   initGuest(@Body() dto: InitGuestDto) {
     return this.guestService.initializeGuest(dto);
   }
 
   @Patch('name')
   @UseGuards(GuestAuthGuard)
-  async updateName(@Body() dto: UpdateGuestNameDto, @CurrentGuest() guest: GuestPlayer) {
-    return this.guestService.updateName(guest, dto.name);
+  @RateLimit({
+    keyPrefix: 'rate:name:',
+    keySource: 'guest',
+    limit: Number(process.env.RATE_LIMIT_NAME ?? 10),
+    windowSeconds: 60,
+  })
+  updateName(@Body() dto: UpdateNameDto, @Guest() guest: AuthenticatedGuest) {
+    return this.guestService.updateName(guest.guestId, guest.gameId, dto.name);
   }
 }

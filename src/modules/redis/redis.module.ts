@@ -1,25 +1,17 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import {
-  createRedisClient,
-  RedisRankingService,
-  RedisRateLimitService,
-  RedisThrottlerStorageService,
-} from './services';
-import { REDIS_CLIENT } from '@/modules/redis/redis.constants';
+import { REDIS_CLIENT, RedisService, createRedisClient } from './redis.service';
 
 @Module({
   providers: [
-    RedisRankingService,
-    RedisRateLimitService,
-    RedisThrottlerStorageService,
+    RedisService,
     {
       provide: REDIS_CLIENT,
       inject: [ConfigService],
       useFactory: createRedisClient,
     },
   ],
-  exports: [REDIS_CLIENT, RedisRankingService, RedisRateLimitService, RedisThrottlerStorageService],
+  exports: [RedisService, REDIS_CLIENT],
 })
 export class RedisModule {}

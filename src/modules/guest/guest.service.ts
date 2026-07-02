@@ -1,68 +1,35 @@
-import { GuestPlayer, Prisma } from '@prisma/client';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { GameId } from '@prisma/client';
 
 import { InitGuestDto } from '@/modules/guest/dto/init-guest.dto';
 import { GuestRepository } from '@/modules/guest/guest.repository';
+import { validateGameId } from '@/common/constants';
+import { generateSecretToken, hashSecretToken } from '@/common/utils';
 
 @Injectable()
 export class GuestService {
   constructor(private readonly guestRepository: GuestRepository) {}
 
   async initializeGuest(dto: InitGuestDto) {
-    const { installId } = dto;
+    const gameId = validateGameId(dto.gameId);
+    const secretToken = generateSecretToken();
+    const secretTokenHash = hashSecretToken(secretToken);
 
-    if (installId) {
-      const existing = await this.guestRepository.findByInstallId(installId);
-      if (existing) {
-        return {
-          guestId: existing.id,
-          relinked: true,
-        };
-      }
-    }
+    const guest = await this.guestRepository.create(gameId, secretTokenHash);
 
-    try {
-      const credentials = await this.guestRepository.create(installId);
-      return {
-        guestId: credentials.guestId,
-        relinked: false,
-      };
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        // Lost a concurrent init race for the same installId. Re-read the winning row so
-        // a double-submit from the same device still resolves to one guest.
-        if (installId) {
-          const existing = await this.guestRepository.findByInstallId(installId);
-          if (existing) {
-            return {
-              guestId: existing.id,
-              relinked: true,
-            };
-          }
-        }
-      }
-
-      throw error;
-    }
+    return {
+      guestId: guest.id,
+      gameId: guest.gameId,
+      secretToken,
+    };
   }
 
-  async getGuestById(guestId: string) {
-    return (await this.guestRepository.findById(guestId)) ?? undefined;
-  }
-
-  async getGuestByIdOrThrow(guestId: string): Promise<GuestPlayer> {
-    const guest = await this.getGuestById(guestId);
-    if (!guest) {
-      throw new NotFoundException(`Guest "${guestId}" not found`);
-    }
-
-    return guest;
-  }
-
-  async updateName(guest: GuestPlayer, name: string) {
-    const updated = await this.guestRepository.updateName(guest.id, name);
+  async updateName(guestId: string, gameId: string, name: string) {
+    const validatedGameId = validateGameId(gameId) as GameId;
+    const updated = await this.guestRepository.updateName(validatedGameId, guestId, name);
     return {
       guestId: updated.id,
+      gameId: updated.gameId,
       name: updated.name,
     };
   }

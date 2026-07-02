@@ -4,10 +4,13 @@ import { AppModule } from '@/app.module';
 import { NestFactory } from '@nestjs/core';
 import { HttpExceptionFilter } from '@/common/filters';
 import { ResponseInterceptor } from '@/common/interceptors';
+import { validateGameSecrets } from '@/common/utils';
 import { Logger, HttpException, ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  validateGameSecrets();
+
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api');
@@ -23,8 +26,10 @@ async function bootstrap() {
   );
 
   app.enableCors({
+    credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
     methods: ['GET', 'PUT', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    origin: process.env.CORS_ORIGIN?.split(',') ?? 'http://localhost:5173',
   });
 
   app.useGlobalPipes(

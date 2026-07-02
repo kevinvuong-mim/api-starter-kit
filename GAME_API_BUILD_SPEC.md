@@ -173,7 +173,6 @@ src/
 prisma/
   schema.prisma
   migrations/
-  seed.ts
 
 docker-compose.yml
 .env
@@ -191,17 +190,12 @@ docker-compose.yml
 
 export enum GameId {
   FRULOOP = 'FRULOOP',
-  STACK_JUMP = 'STACK_JUMP',
 }
 
 export const GAME_CONFIG: Record<GameId, { name: string; replaySecret: string }> = {
   [GameId.FRULOOP]: {
     name: 'Fruloop',
     replaySecret: process.env.REPLAY_SECRET_FRULOOP ?? '',
-  },
-  [GameId.STACK_JUMP]: {
-    name: 'Stack Jump',
-    replaySecret: process.env.REPLAY_SECRET_STACK_JUMP ?? '',
   },
 } as const;
 ```
@@ -253,7 +247,6 @@ datasource db {
 
 enum GameId {
   FRULOOP
-  STACK_JUMP
 }
 
 model GuestPlayer {
@@ -290,7 +283,7 @@ model GameResult {
 
   // Composite PK bao gồm createdAt để hỗ trợ partition by range
   @@id([id, createdAt])
-  @@unique([gameId, guestId, clientResultId])
+  @@index([gameId, guestId, clientResultId])
   @@index([gameId, guestId])
   @@index([gameId, createdAt])
   @@map("game_results")
@@ -321,52 +314,101 @@ model Leaderboard {
 
 ## Lưu ý về Prisma + PostgreSQL Partitioning
 
-Prisma không hỗ trợ declarative partitioning. Quy trình đúng:
+Prisma không hỗ trợ declarative partitioning. Vì vậy phải dùng **2-phase migration**:
 
-1. Chạy `prisma migrate dev` để tạo table `game_results` bình thường.
-2. Tạo custom migration SQL để convert sang partitioned table:
+1. Chạy `prisma migrate dev` để tạo `game_results` dạng table thường.
+2. Tạo custom SQL migration để chuyển sang partitioned table.
+3. Nếu migration được apply thủ công, đánh dấu trạng thái bằng `prisma migrate resolve`.
+
+### Custom migration mẫu
 
 ```sql
 -- prisma/migrations/XXXXXX_partition_game_results/migration.sql
+-- Convert game_results into a range-partitioned table by createdAt.
+-- Prisma doesn't support declarative partitioning, so this migration is pure SQL.
 
--- Đổi tên table cũ
-ALTER TABLE game_results RENAME TO game_results_old;
+-- 1) Rename old constraints/indexes first to avoid name collisions
+-- when creating the new parent table with the same canonical names.
+ALTER TABLE "game_results" RENAME CONSTRAINT "game_results_pkey" TO "game_results_old_pkey";
+ALTER TABLE "game_results" RENAME CONSTRAINT "game_results_gameId_guestId_fkey" TO "game_results_old_gameId_guestId_fkey";
+ALTER INDEX "game_results_gameId_guestId_idx" RENAME TO "game_results_old_gameId_guestId_idx";
+ALTER INDEX "game_results_gameId_createdAt_idx" RENAME TO "game_results_old_gameId_createdAt_idx";
+ALTER INDEX "game_results_gameId_guestId_clientResultId_idx" RENAME TO "game_results_old_gameId_guestId_clientResultId_idx";
 
--- Tạo partitioned table mới
-CREATE TABLE game_results (
-  id              TEXT        NOT NULL,
-  "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  "gameId"        "GameId"    NOT NULL,
-  "guestId"       TEXT        NOT NULL,
-  "clientResultId" TEXT       NOT NULL,
-  score           INTEGER     NOT NULL,
-  "replayHash"    TEXT        NOT NULL,
-  metadata        JSONB,
-  "playedAt"      TIMESTAMPTZ,
-  PRIMARY KEY (id, "createdAt")
+-- 2) Move old table out of the way.
+ALTER TABLE "game_results" RENAME TO "game_results_old";
+
+-- 3) Recreate partitioned parent table.
+CREATE TABLE "game_results" (
+  "id" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "gameId" "GameId" NOT NULL,
+  "guestId" TEXT NOT NULL,
+  "clientResultId" TEXT NOT NULL,
+  "score" INTEGER NOT NULL,
+  "replayHash" TEXT NOT NULL,
+  "metadata" JSONB,
+  "playedAt" TIMESTAMP(3),
+  CONSTRAINT "game_results_pkey" PRIMARY KEY ("id", "createdAt"),
+  CONSTRAINT "game_results_gameId_guestId_fkey"
+    FOREIGN KEY ("gameId", "guestId")
+    REFERENCES "guest_players"("gameId", "id")
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
 ) PARTITION BY RANGE ("createdAt");
 
--- Tạo indexes trên partitioned table
-CREATE INDEX ON game_results ("gameId", "guestId");
-CREATE INDEX ON game_results ("gameId", "createdAt");
-CREATE UNIQUE INDEX ON game_results ("gameId", "guestId", "clientResultId");
+-- 4) Indexes for hot read paths and dedup lookup.
+CREATE INDEX "game_results_gameId_guestId_idx" ON "game_results"("gameId", "guestId");
+CREATE INDEX "game_results_gameId_createdAt_idx" ON "game_results"("gameId", "createdAt");
+CREATE INDEX "game_results_gameId_guestId_clientResultId_idx" ON "game_results"("gameId", "guestId", "clientResultId");
 
--- Tạo partition đầu tiên
-CREATE TABLE game_results_2025
-  PARTITION OF game_results
-  FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
-
-CREATE TABLE game_results_2026
-  PARTITION OF game_results
+-- 5) Seed first partition.
+CREATE TABLE "game_results_2026"
+  PARTITION OF "game_results"
   FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
 
--- Migrate dữ liệu cũ (nếu có)
-INSERT INTO game_results SELECT * FROM game_results_old;
+-- 6) Copy old data into the partitioned table.
+INSERT INTO "game_results" (
+  "id",
+  "createdAt",
+  "gameId",
+  "guestId",
+  "clientResultId",
+  "score",
+  "replayHash",
+  "metadata",
+  "playedAt"
+)
+SELECT
+  "id",
+  "createdAt",
+  "gameId",
+  "guestId",
+  "clientResultId",
+  "score",
+  "replayHash",
+  "metadata",
+  "playedAt"
+FROM "game_results_old";
 
-DROP TABLE game_results_old;
+-- 7) Drop old table.
+DROP TABLE "game_results_old";
 ```
 
-3. Đánh dấu migration này là đã apply thủ công: `prisma migrate resolve --applied <migration_name>`.
+Nếu migration được chạy ngoài `prisma migrate dev`, đánh dấu như sau:
+
+```bash
+prisma migrate resolve --applied XXXXXX_partition_game_results
+```
+
+### Lưu ý quan trọng về UNIQUE trên partitioned table
+
+PostgreSQL yêu cầu mọi `UNIQUE` constraint/index trên partitioned table phải chứa **toàn bộ partition key**.
+Vì `game_results` partition theo `createdAt`, nên `UNIQUE (gameId, guestId, clientResultId)` là **không hợp lệ**.
+
+Giải pháp thực tế:
+- Dùng index thường cho `(gameId, guestId, clientResultId)` để tối ưu lookup dedup.
+- Dedup idempotency xử lý ở service/repository (check existing trước khi insert) thay vì dựa vào unique index toàn cục.
 
 ## Partition mẫu
 
@@ -380,7 +422,7 @@ CREATE TABLE game_results_<YYYY>
 
 - Chạy ngày 1 mỗi tháng (`PARTITION_CRON`)
 - Logic: kiểm tra xem partition cho **năm tiếp theo** đã tồn tại chưa
-- Nếu chưa → tạo mới bằng `prisma.$executeRawUnsafe`
+- Nếu chưa có → tạo mới bằng `prisma.$executeRawUnsafe`
 - Nếu đã có → skip (idempotent)
 
 ENV:
@@ -802,7 +844,6 @@ PARTITION_CRON="0 3 1 * *"
 # Replay secrets — một biến per game, không commit giá trị thật
 # Format: SHA256 hex (64 ký tự)
 REPLAY_SECRET_FRULOOP=
-REPLAY_SECRET_STACK_JUMP=
 ```
 
 > **Khi thêm game mới:** Thêm `REPLAY_SECRET_<GAME_ID>=` vào `.env.example` và CI/CD secrets.
@@ -820,10 +861,9 @@ REPLAY_SECRET_STACK_JUMP=
   "prisma:migrate": "prisma migrate dev",
   "prisma:generate": "prisma generate",
   "prisma:reset": "prisma migrate reset",
-  "prisma:seed": "ts-node prisma/seed.ts",
 
-  "lint": "eslint .",
-  "format": "prettier ."
+  "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+  "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\""
 }
 ```
 
@@ -838,8 +878,6 @@ docker-compose up -d
 
 npm run prisma:migrate
 # Sau đó apply custom partition migration thủ công (xem Section 5)
-
-npm run prisma:seed
 
 npm run start:dev
 

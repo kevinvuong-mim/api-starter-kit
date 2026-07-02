@@ -1,16 +1,14 @@
 import { Type } from 'class-transformer';
-import { Max, Min, IsInt, IsString, Matches, IsOptional } from 'class-validator';
+import { Max, Min, IsInt, IsString, IsOptional, IsUUID } from 'class-validator';
 
-const GUEST_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { GameId } from '@/common/constants';
 
 export class LeaderboardQueryDto {
   @IsString()
-  gameId!: string;
+  gameId!: GameId;
 
   @IsOptional()
-  @IsString()
-  @Matches(GUEST_ID_PATTERN, { message: 'guestId must be a UUID' })
+  @IsUUID()
   guestId?: string;
 
   @Min(1)
@@ -22,5 +20,5 @@ export class LeaderboardQueryDto {
   @IsInt()
   @Max(100)
   @Type(() => Number)
-  limit: number = 100;
+  limit: number = 20;
 }

@@ -1,46 +1,45 @@
-import Redis from 'ioredis';
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
-import { REDIS_CLIENT } from '@/modules/redis/redis.constants';
+import { RedisService } from '@/modules/redis/redis.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 
 @Injectable()
 export class AppService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly redisService: RedisService,
   ) {}
 
-  getHello() {
-    return 'Hello World!';
-  }
+  async checkHealth() {
+    const [dbStatus, redisStatus] = await Promise.all([this.checkPostgres(), this.checkRedis()]);
 
-  async check() {
-    const [postgres, redis] = await Promise.all([this.checkPostgres(), this.checkRedis()]);
+    const services = {
+      db: dbStatus,
+      redis: redisStatus,
+    };
+
+    const healthy = dbStatus === 'connected' && redisStatus === 'connected';
 
     return {
-      redis,
-      postgres,
+      status: healthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
-      status: postgres === 'up' && redis === 'up' ? 'ok' : 'degraded',
+      services,
+      uptime: Math.floor(process.uptime()),
+      healthy,
     };
   }
 
-  private async checkPostgres(): Promise<'up' | 'down'> {
+  private async checkPostgres(): Promise<'connected' | 'disconnected'> {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-      return 'up';
+      return 'connected';
     } catch {
-      return 'down';
+      return 'disconnected';
     }
   }
 
-  private async checkRedis(): Promise<'up' | 'down'> {
-    try {
-      const pong = await this.redis.ping();
-      return pong === 'PONG' ? 'up' : 'down';
-    } catch {
-      return 'down';
-    }
+  private async checkRedis(): Promise<'connected' | 'disconnected'> {
+    const ok = await this.redisService.ping();
+    return ok ? 'connected' : 'disconnected';
   }
 }

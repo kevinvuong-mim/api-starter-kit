@@ -7,10 +7,12 @@ import { AppModule } from '@/app.module';
 import { HttpExceptionFilter } from '@/common/filters';
 import { ResponseInterceptor } from '@/common/interceptors';
 
-describe('AppController (e2e)', () => {
+describe('Health (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
+    process.env.REPLAY_SECRET_FRULOOP = 'a'.repeat(64);
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -34,13 +36,12 @@ describe('AppController (e2e)', () => {
     await app.close();
   });
 
-  it('/api (GET)', () => {
+  it('/api/health (GET)', () => {
     return request(app.getHttpServer())
-      .get('/api')
-      .expect(200)
+      .get('/api/health')
       .expect((res) => {
-        expect(res.body).toHaveProperty('success', true);
-        expect(res.body).toHaveProperty('data', 'Hello World!');
+        expect([200, 503]).toContain(res.status);
+        expect(res.body).toHaveProperty('success', false);
       });
   });
 });

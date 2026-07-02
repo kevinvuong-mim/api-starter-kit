@@ -1,36 +1,37 @@
 import { Injectable } from '@nestjs/common';
+import { GameId } from '@prisma/client';
 
 import { PrismaService } from '@/modules/prisma/prisma.service';
-
-export interface GuestCredentials {
-  guestId: string;
-}
 
 @Injectable()
 export class GuestRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findById(id: string) {
-    return this.prisma.guestPlayer.findUnique({ where: { id } });
+  findById(gameId: GameId, id: string) {
+    return this.prisma.guestPlayer.findUnique({
+      where: { gameId_id: { gameId, id } },
+    });
   }
 
-  findByInstallId(installId: string) {
-    return this.prisma.guestPlayer.findUnique({ where: { installId } });
+  findBySecretTokenHash(secretTokenHash: string) {
+    return this.prisma.guestPlayer.findUnique({
+      where: { secretTokenHash },
+    });
   }
 
-  async create(installId?: string) {
-    const guest = await this.prisma.guestPlayer.create({
+  create(gameId: GameId, secretTokenHash: string) {
+    return this.prisma.guestPlayer.create({
       data: {
-        installId,
+        gameId,
+        secretTokenHash,
       },
     });
-
-    return {
-      guestId: guest.id,
-    };
   }
 
-  updateName(id: string, name: string) {
-    return this.prisma.guestPlayer.update({ where: { id }, data: { name } });
+  updateName(gameId: GameId, id: string, name: string) {
+    return this.prisma.guestPlayer.update({
+      where: { gameId_id: { gameId, id } },
+      data: { name },
+    });
   }
 }
