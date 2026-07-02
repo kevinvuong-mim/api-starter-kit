@@ -170,6 +170,18 @@ src/
       maintenance.module.ts
       maintenance.service.ts
 
+documents/
+  apis/
+    game.md
+    guest.md
+    leaderboard.md
+    health-check.md
+  schedule/
+    game-results-partition-maintenance.md
+  setup/
+    docker.md
+    environment-variables.md
+
 prisma/
   schema.prisma
   migrations/
@@ -261,6 +273,7 @@ model GuestPlayer {
 
   @@id([id])
   @@unique([gameId, id])
+  @@unique([secretTokenHash])
   @@map("guest_players")
 }
 
@@ -406,9 +419,38 @@ prisma migrate resolve --applied XXXXXX_partition_game_results
 PostgreSQL yêu cầu mọi `UNIQUE` constraint/index trên partitioned table phải chứa **toàn bộ partition key**.
 Vì `game_results` partition theo `createdAt`, nên `UNIQUE (gameId, guestId, clientResultId)` là **không hợp lệ**.
 
-Giải pháp thực tế:
-- Dùng index thường cho `(gameId, guestId, clientResultId)` để tối ưu lookup dedup.
-- Dedup idempotency xử lý ở service/repository (check existing trước khi insert) thay vì dựa vào unique index toàn cục.
+Giải pháp thực tế — dedup atomic bằng Postgres advisory lock (không dựa vào `ON CONFLICT`):
+
+- Dùng index thường cho `(gameId, guestId, clientResultId)` để tối ưu lookup dedup (đã có sẵn ở `@@index([gameId, guestId, clientResultId])`).
+- Vì không có unique index toàn cục nên **không thể dùng `INSERT ... ON CONFLICT` (upsert)** để dedup — 2 request đồng thời với cùng `clientResultId` có thể cùng pass check "chưa tồn tại" rồi cùng insert, tạo duplicate row.
+- Giải pháp: mỗi item được xử lý trong **1 transaction riêng**, lấy **Postgres advisory lock theo transaction** (`pg_advisory_xact_lock`) với key là hash 64-bit của `(gameId, guestId, clientResultId)`, sau đó mới `SELECT ... WHERE gameId = ? AND guestId = ? AND clientResultId = ?`. Lock tự giải phóng khi transaction commit/rollback.
+
+```ts
+// Dedup key: hash 64-bit ổn định từ (gameId, guestId, clientResultId)
+function dedupLockKey(gameId: string, guestId: string, clientResultId: string): bigint {
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${gameId}|${guestId}|${clientResultId}`)
+    .digest();
+  return hash.readBigInt64BE(0); // dùng làm key cho pg_advisory_xact_lock
+}
+```
+
+```sql
+-- Trong 1 transaction, cho từng item của batch:
+SELECT pg_advisory_xact_lock($lockKey);
+
+SELECT 1 FROM game_results
+WHERE "gameId" = $gameId AND "guestId" = $guestId AND "clientResultId" = $clientResultId
+LIMIT 1;
+-- Nếu đã tồn tại → skip item này (đã insert trước đó), commit, next item
+-- Nếu chưa tồn tại → INSERT INTO game_results (...) VALUES (...), commit
+```
+
+> Lý do dùng advisory lock thay vì "check rồi insert" đơn thuần: lock đảm bảo
+> 2 request trùng `clientResultId` chạy đồng thời sẽ tuần tự hoá tại đúng
+> item đó (không khoá toàn bảng), loại bỏ race condition mà vẫn tương thích
+> với hạn chế "UNIQUE phải chứa partition key" ở trên.
 
 ## Partition mẫu
 
@@ -566,9 +608,16 @@ const expected = computeReplaySignature(replaySecret, payload);
 1. Validate `gameId` và body
 2. Xác thực Bearer token
 3. Verify signature từng item (skip item invalid, không fail toàn batch)
-4. Insert batch items hợp lệ (ignore duplicate `clientResultId` qua `upsert`)
+4. Với từng item hợp lệ, dedup + insert **atomic** theo cơ chế advisory lock ở Section 5
+   (mỗi item 1 transaction: `pg_advisory_xact_lock` theo `(gameId, guestId, clientResultId)`
+   → check tồn tại → skip nếu đã có, insert nếu chưa có)
 5. Upsert leaderboard: chỉ update `bestScore` nếu `score > bestScore` hiện tại
 6. Update Redis sorted set nếu score mới là best score của player
+
+> Lưu ý: bước 4 **không phải** `INSERT ... ON CONFLICT` (upsert) vì bảng
+> `game_results` không thể có unique index trên `(gameId, guestId, clientResultId)`
+> khi đã partition theo `createdAt` (xem Section 5). Dedup được đảm bảo atomic
+> nhờ advisory lock trong transaction, không phải nhờ constraint ở tầng DB.
 
 **Leaderboard upsert (idempotent, chống race condition):**
 
@@ -654,9 +703,14 @@ Trigger: khi ZCARD leaderboard:{gameId} = 0
 ```text
 Auth token cache:
 Key:   auth:token:{sha256Hash}
-Value: guestId
+Value: JSON string { "guestId": "...", "gameId": "..." }
 TTL:   5 phút (300s)
 Lý do: tránh query DB mỗi request trên hot path POST /results
+
+> Value phải chứa cả `gameId`, không chỉ `guestId` — route như
+> `POST /games/:gameId/results` cần đối chiếu `gameId` của guest đã
+> xác thực với `gameId` trên URL. Nếu cache chỉ lưu `guestId`, cache
+> hit sẽ không có đủ dữ liệu để attach `request.user` đúng như Section 12.
 
 Leaderboard cache:
 Key:    leaderboard:{gameId}
@@ -776,12 +830,18 @@ function validateGameSecrets(): void {
 Lấy token từ header Authorization: Bearer <token>
 → sha256(token) → tokenHash
 → Check Redis: GET auth:token:{tokenHash}
-  → Hit: guestId từ cache
+  → Hit: parse JSON → { guestId, gameId } từ cache
   → Miss: query DB guest_players WHERE secretTokenHash = tokenHash
-         → Cache kết quả: SET auth:token:{tokenHash} {guestId} EX 300
-→ Nếu không tìm thấy → 401
+         → Không tìm thấy → 401
+         → Tìm thấy → Cache kết quả:
+             SET auth:token:{tokenHash} JSON.stringify({ guestId, gameId }) EX 300
+→ Nếu không tìm thấy (cả cache lẫn DB) → 401
 → Attach vào request.user = { guestId, gameId }
 ```
+
+> Cache value luôn là JSON `{ guestId, gameId }`, không chỉ `guestId`,
+> để cache hit không cần query DB thêm lần nào mà vẫn đủ dữ liệu
+> cho các route cần đối chiếu `gameId` (ví dụ `POST /games/:gameId/results`).
 
 Decorator:
 
@@ -808,6 +868,10 @@ computeReplaySignature(secret: string, payload: string): string
 
 // Validate định dạng SHA256 hex (64 ký tự, lowercase a-f0-9)
 isValidSha256Hex(value: string): boolean
+
+// Hash 64-bit ổn định từ (gameId, guestId, clientResultId), dùng làm
+// key cho pg_advisory_xact_lock khi dedup insert game_results (xem Section 5)
+dedupLockKey(gameId: string, guestId: string, clientResultId: string): bigint
 ```
 
 ---
@@ -904,7 +968,7 @@ Nên rotate khi traffic thấp
 
 ---
 
-# 19. Logging & Monitoring
+# 17. Logging & Monitoring
 
 - NestJS Logger (mỗi module dùng riêng)
 - Request logging (method, path, status, duration)
@@ -915,7 +979,7 @@ Nên rotate khi traffic thấp
 
 ---
 
-# 20. CORS
+# 18. CORS
 
 ```ts
 app.enableCors({
@@ -928,7 +992,7 @@ app.enableCors({
 
 ---
 
-# 21. Bảo mật bổ sung
+# 19. Bảo mật bổ sung
 
 - `helmet` — security headers
 - `compression` — gzip responses
@@ -941,7 +1005,7 @@ app.enableCors({
 
 ---
 
-# 22. Trade-off
+# 20. Trade-off
 
 | Ưu điểm                        | Nhược điểm                                     |
 | ------------------------------ | ---------------------------------------------- |
@@ -956,7 +1020,7 @@ app.enableCors({
 
 ---
 
-# 23. Đồng bộ với game-starter-kit (frontend)
+# 21. Đồng bộ với game-starter-kit (frontend)
 
 | Điểm đồng bộ        | Backend                                                                 | Frontend (game-starter-kit)                                 |
 | ------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
