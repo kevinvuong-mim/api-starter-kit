@@ -1,15 +1,4 @@
-import {
-  Min,
-  IsInt,
-  IsArray,
-  IsString,
-  IsISO8601,
-  IsOptional,
-  ArrayMaxSize,
-  ArrayMinSize,
-  ValidateNested,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { Min, IsInt, IsString, IsISO8601, IsOptional } from 'class-validator';
 
 import { IsValidMetadata } from '@/common/validators';
 
@@ -31,13 +20,4 @@ export class SubmitResultDto {
 
   @IsString()
   signature!: string;
-}
-
-export class SubmitResultBatchDto {
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(50)
-  @ValidateNested({ each: true })
-  @Type(() => SubmitResultDto)
-  items!: SubmitResultDto[];
 }

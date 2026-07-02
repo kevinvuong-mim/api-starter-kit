@@ -80,11 +80,16 @@ new ValidationPipe({
   "success": false,
   "error": "",
   "message": "",
+  "path": "",
+  "statusCode": 400,
+  "timestamp": "",
+  "errors": [],
   "stack": ""
 }
 ```
 
 > `stack` chỉ hiển thị khi `NODE_ENV !== 'production'`
+> `errors` chỉ có khi validation lỗi (class-validator)
 
 ### HTTP Status
 
@@ -124,15 +129,28 @@ src/
     guards/
       guest-auth.guard.ts
       rate-limit.guard.ts
+      index.ts
 
     decorators/
       guest.decorator.ts
+      rate-limit.decorator.ts
+      index.ts
+
+    validators/
+      is-valid-metadata.validator.ts
+      index.ts
+
+    interfaces/
+      response.interface.ts
+      index.ts
 
     interceptors/
       response.interceptor.ts
+      index.ts
 
     filters/
       http-exception.filter.ts
+      index.ts
 
   modules/
     prisma/
@@ -147,6 +165,7 @@ src/
       guest.module.ts
       guest.controller.ts
       guest.service.ts
+      guest.repository.ts
       dto/
         init-guest.dto.ts
         update-name.dto.ts
@@ -162,6 +181,7 @@ src/
       results.module.ts
       results.controller.ts
       results.service.ts
+      results.repository.ts
       dto/
         submit-result.dto.ts
         submit-result-batch.dto.ts
@@ -501,21 +521,28 @@ sha256(token)
 
 Không auth.
 
-Response:
+Response (bọc qua `ResponseInterceptor`):
 
 ```json
 {
-  "status": "ok",
-  "timestamp": "2026-01-15T10:00:00.000Z",
-  "services": {
-    "db": "connected",
-    "redis": "connected"
+  "success": true,
+  "statusCode": 200,
+  "message": "Data retrieved successfully",
+  "data": {
+    "status": "ok",
+    "timestamp": "2026-01-15T10:00:00.000Z",
+    "services": {
+      "db": "connected",
+      "redis": "connected"
+    },
+    "uptime": 12345
   },
-  "uptime": 12345
+  "path": "/api/health",
+  "timestamp": "2026-01-15T10:00:00.000Z"
 }
 ```
 
-DB hoặc Redis lỗi → `503`
+DB hoặc Redis lỗi → `503` (error envelope, không bọc success)
 
 ---
 
@@ -799,6 +826,8 @@ if (!exists.length) {
 }
 ```
 
+> `MaintenanceService` cũng gọi `ensureNextYearPartition()` trong `onModuleInit()` để đảm bảo partition tồn tại ngay khi app khởi động (bổ sung cho cron hàng tháng).
+
 ---
 
 # 11. Startup Guard
@@ -866,6 +895,9 @@ timingSafeCompare(a: string, b: string): boolean
 // HMAC-SHA256 hex
 computeReplaySignature(secret: string, payload: string): string
 
+// Verify HMAC replay signature (timing-safe hex compare)
+verifyReplaySignature(secret: string, payload: string, received: string): boolean
+
 // Validate định dạng SHA256 hex (64 ký tự, lowercase a-f0-9)
 isValidSha256Hex(value: string): boolean
 
@@ -879,7 +911,7 @@ dedupLockKey(gameId: string, guestId: string, clientResultId: string): bigint
 # 14. Environment Variables
 
 ```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/gamedb
+DATABASE_URL="postgresql://kwong2000:1234abcd@localhost:5432/game-api"
 
 REDIS_URL=redis://localhost:6379
 

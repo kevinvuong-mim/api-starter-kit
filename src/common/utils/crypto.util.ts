@@ -36,3 +36,9 @@ export function verifyReplaySignature(secret: string, payload: string, received:
     return false;
   }
 }
+
+export function dedupLockKey(gameId: string, guestId: string, clientResultId: string): bigint {
+  const hash = createHash('sha256').update(`${gameId}|${guestId}|${clientResultId}`).digest();
+
+  return hash.readBigInt64BE(0);
+}

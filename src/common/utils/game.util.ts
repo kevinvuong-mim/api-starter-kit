@@ -1,8 +1,10 @@
-import { GameId, GAME_CONFIG } from '@/common/constants';
+import { GameId, getGameConfig } from '@/common/constants';
 import { isValidSha256Hex } from '@/common/utils/crypto.util';
 
 export function validateGameSecrets(): void {
-  for (const [gameId, config] of Object.entries(GAME_CONFIG)) {
+  for (const gameId of Object.values(GameId)) {
+    const config = getGameConfig(gameId);
+
     if (!config.replaySecret) {
       throw new Error(`[StartupGuard] Missing replaySecret for game: ${gameId}`);
     }

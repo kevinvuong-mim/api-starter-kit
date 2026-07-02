@@ -21,26 +21,14 @@ export class LeaderboardService {
     const limit = Math.min(query.limit, 100);
     const offset = (page - 1) * limit;
 
-    await this.ensureLeaderboardCache(gameId);
-
-    let items = await this.redisService.getLeaderboardTop(gameId, offset, limit);
-    let total = await this.redisService.getLeaderboardCount(gameId);
-
-    if (total === 0) {
-      total = await this.resultsRepository.countLeaderboard(gameId);
-      items = await this.fetchLeaderboardFromDb(gameId, offset, limit);
-    }
+    const total = await this.resultsRepository.countLeaderboard(gameId);
+    const items = await this.fetchLeaderboardItems(gameId, offset, limit);
 
     const names = await this.resolveGuestNames(items.map((entry) => entry.guestId));
 
     let self: { rank: number; bestScore: number } | null = null;
     if (query.guestId) {
-      const cached = await this.redisService.getLeaderboardRank(gameId, query.guestId);
-      if (cached) {
-        self = { rank: cached.rank, bestScore: cached.bestScore };
-      } else {
-        self = await this.getSelfRankFromDb(gameId, query.guestId);
-      }
+      self = await this.resolveSelfRank(gameId, query.guestId);
     }
 
     return {
@@ -56,6 +44,34 @@ export class LeaderboardService {
       })),
       self,
     };
+  }
+
+  private async fetchLeaderboardItems(gameId: GameId, offset: number, limit: number) {
+    try {
+      await this.ensureLeaderboardCache(gameId);
+      const cacheCount = await this.redisService.getLeaderboardCount(gameId);
+
+      if (cacheCount > 0 && offset < cacheCount) {
+        return this.redisService.getLeaderboardTop(gameId, offset, limit);
+      }
+    } catch {
+      // Redis miss or down — fall back to PostgreSQL.
+    }
+
+    return this.fetchLeaderboardFromDb(gameId, offset, limit);
+  }
+
+  private async resolveSelfRank(gameId: GameId, guestId: string) {
+    try {
+      const cached = await this.redisService.getLeaderboardRank(gameId, guestId);
+      if (cached) {
+        return { rank: cached.rank, bestScore: cached.bestScore };
+      }
+    } catch {
+      // Redis miss or down — fall back to PostgreSQL.
+    }
+
+    return this.getSelfRankFromDb(gameId, guestId);
   }
 
   private async ensureLeaderboardCache(gameId: GameId) {

@@ -20,5 +20,11 @@ export function validateGameId(gameId: string): GameId {
 }
 
 export function getGameConfig(gameId: GameId) {
-  return GAME_CONFIG[gameId];
+  const config = GAME_CONFIG[gameId];
+  const envKey = `REPLAY_SECRET_${gameId}`;
+
+  return {
+    name: config.name,
+    replaySecret: process.env[envKey] ?? config.replaySecret,
+  };
 }

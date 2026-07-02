@@ -7,11 +7,11 @@ import { UpdateNameDto } from '@/modules/guest/dto/update-name.dto';
 import { GuestService } from '@/modules/guest/guest.service';
 
 @Controller('guest')
-@UseGuards(RateLimitGuard)
 export class GuestController {
   constructor(private readonly guestService: GuestService) {}
 
   @Post('init')
+  @UseGuards(RateLimitGuard)
   @RateLimit({
     keyPrefix: 'rate:init:',
     keySource: 'ip',
@@ -23,7 +23,7 @@ export class GuestController {
   }
 
   @Patch('name')
-  @UseGuards(GuestAuthGuard)
+  @UseGuards(GuestAuthGuard, RateLimitGuard)
   @RateLimit({
     keyPrefix: 'rate:name:',
     keySource: 'guest',

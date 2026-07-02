@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { GameId, Prisma } from '@prisma/client';
 
+import { dedupLockKey } from '@/common/utils';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import type { SubmitResultDto } from '@/modules/results/dto/submit-result.dto';
 
@@ -12,45 +13,43 @@ export interface ValidatedResultItem extends SubmitResultDto {
 export class ResultsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findExistingClientResultIds(gameId: GameId, guestId: string, clientResultIds: string[]) {
-    if (clientResultIds.length === 0) {
-      return Promise.resolve([] as string[]);
-    }
+  async insertResultAtomic(
+    gameId: GameId,
+    guestId: string,
+    item: ValidatedResultItem,
+  ): Promise<boolean> {
+    const lockKey = dedupLockKey(gameId, guestId, item.clientResultId);
 
-    return this.prisma.gameResult
-      .findMany({
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
+
+      const existing = await tx.gameResult.findFirst({
         where: {
           gameId,
           guestId,
-          clientResultId: { in: clientResultIds },
+          clientResultId: item.clientResultId,
         },
-        select: { clientResultId: true },
-      })
-      .then((rows) => rows.map((row) => row.clientResultId));
-  }
+        select: { id: true },
+      });
 
-  async insertResults(
-    gameId: GameId,
-    guestId: string,
-    items: ValidatedResultItem[],
-  ): Promise<number> {
-    if (items.length === 0) {
-      return 0;
-    }
+      if (existing) {
+        return false;
+      }
 
-    const data: Prisma.GameResultCreateManyInput[] = items.map((item) => ({
-      gameId,
-      guestId,
-      score: item.score,
-      replayHash: item.replayHash,
-      clientResultId: item.clientResultId,
-      metadata: item.metadata as Prisma.InputJsonValue | undefined,
-      playedAt: item.playedAt ? new Date(item.playedAt) : undefined,
-    }));
+      await tx.gameResult.create({
+        data: {
+          gameId,
+          guestId,
+          score: item.score,
+          replayHash: item.replayHash,
+          clientResultId: item.clientResultId,
+          metadata: item.metadata as Prisma.InputJsonValue | undefined,
+          playedAt: item.playedAt ? new Date(item.playedAt) : undefined,
+        },
+      });
 
-    const result = await this.prisma.gameResult.createMany({ data });
-
-    return result.count;
+      return true;
+    });
   }
 
   async upsertLeaderboardBestScore(gameId: GameId, guestId: string, score: number) {

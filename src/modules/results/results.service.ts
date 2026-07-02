@@ -34,34 +34,33 @@ export class ResultsService {
       return verifyReplaySignature(replaySecret, payload, item.signature);
     });
 
-    const existingIds = await this.resultsRepository.findExistingClientResultIds(
-      gameId,
-      guest.guestId,
-      validItems.map((item) => item.clientResultId),
-    );
-    const existingSet = new Set(existingIds);
+    let insertedCount = 0;
+    const insertedScores: number[] = [];
 
-    const toInsert = validItems
-      .filter((item) => !existingSet.has(item.clientResultId))
-      .map((item) => ({
+    for (const item of validItems) {
+      const inserted = await this.resultsRepository.insertResultAtomic(gameId, guest.guestId, {
         ...item,
         replayHash: item.signature,
-      }));
+      });
 
-    const insertedCount = await this.resultsRepository.insertResults(
-      gameId,
-      guest.guestId,
-      toInsert,
-    );
+      if (inserted) {
+        insertedCount++;
+        insertedScores.push(item.score);
+      }
+    }
 
     if (insertedCount > 0) {
-      const maxScore = Math.max(...toInsert.map((item) => item.score));
-      const bestScore = await this.resultsRepository.upsertLeaderboardBestScore(
+      const previousBest = await this.resultsRepository.getGuestBestScore(gameId, guest.guestId);
+      const maxScore = Math.max(...insertedScores);
+      const newBest = await this.resultsRepository.upsertLeaderboardBestScore(
         gameId,
         guest.guestId,
         maxScore,
       );
-      await this.redisService.updateLeaderboardScore(gameId, guest.guestId, bestScore);
+
+      if (newBest > (previousBest?.bestScore ?? -Infinity)) {
+        await this.redisService.updateLeaderboardScore(gameId, guest.guestId, newBest);
+      }
     }
 
     return {
