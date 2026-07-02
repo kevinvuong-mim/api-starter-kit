@@ -958,8 +958,8 @@ REPLAY_SECRET_FRULOOP=
   "prisma:generate": "prisma generate",
   "prisma:reset": "prisma migrate reset",
 
-  "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-  "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\""
+  "lint": "eslint \"src/**/*.ts\" --fix",
+  "format": "prettier --write \"src/**/*.ts\""
 }
 ```
 
